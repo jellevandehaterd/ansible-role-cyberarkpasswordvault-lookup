@@ -116,8 +116,7 @@ class CyberArkPasswordVaultConnector:
 
         if headers is None:
             headers = {
-                'Content-Type': 'application/json',
-                'x-api-key': '106ab2b87ed945118f3e67be74ce06b1'
+                'Content-Type': 'application/json'
             }
 
         if self._session_token is not None:
@@ -190,13 +189,9 @@ class CyberArkPasswordVaultConnector:
         api_endpoint = 'WebServices/PIMServices.svc/Accounts/{account_id}/Credentials'.format(
             account_id=account_id
         )
-        headers = {
-            'Content-Type': 'text/plain',
-            'x-api-key': '106ab2b87ed945118f3e67be74ce06b1'
-        }
+
         response = self.request(
-            api_endpoint=api_endpoint,
-            headers=headers
+            api_endpoint=api_endpoint
         )
 
         return to_text(response.read())
