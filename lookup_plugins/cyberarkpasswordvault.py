@@ -119,8 +119,10 @@ class CyberArkPasswordVaultConnector:
         if headers is None:
             headers = {
                 'Content-Type': 'application/json'
-                #'x-api-key': '106ab2b87ed945118f3e67be74ce06b1'
             }
+
+        if method == 'POST' and data is None:
+            headers.update({"Content-Length": 0})
 
         if self._session_token is not None:
             headers['Authorization'] = self._session_token
@@ -237,7 +239,7 @@ class LookupModule(LookupBase):
                 safe=self.get_option('safe'),
                 keywords=self.get_option('keywords'),
             )
-            display.vvvv("%s" % account_details)
+
             if account_details["Count"] != 1:
                 raise AnsibleError("Search result contains no accounts or more than 1 account")
 
