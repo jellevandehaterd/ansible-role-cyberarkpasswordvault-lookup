@@ -39,7 +39,8 @@ Injector configuration:
       connection: local
       vars:
         safe: 'MY_SAFE'
-        password_lookup: "{{lookup('cyberarkpasswordvault', keywords='test', safe=safe, validate_certs=False)}}"
+        keywords: 'test'
+        password_lookup: "{{lookup('cyberarkpasswordvault', keywords=keywords, safe=safe, validate_certs=False)}}"
       tasks:
         - debug:
             var: password_lookup
