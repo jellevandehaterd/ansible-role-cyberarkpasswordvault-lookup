@@ -1,0 +1,11 @@
+#!/usr/bin/env OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES ansible-playbook
+
+---
+- hosts: localhost
+  connection: local
+  vars:
+    safe: 'MY_SAFE'
+    password_lookup: "{{lookup('cyberarkpasswordvault', keywords='test', safe=safe, validate_certs=False)}}"
+  tasks:
+    - debug:
+        var: password_lookup

@@ -30,15 +30,17 @@ options :
     env:
       - name: CYBERARK_PASSWORD
     default: admin
-  cyberark_use_radius_authentication :
+  cyberark_use_radius_authentication:
     description: use radius for cyberark authentication.
     env:
       - name: CYBERARK_USE_RADIUS_AUTHENTICATION
     default: false
-  cyberark_app_id:
-    description: use radius for cyberark authentication.
-    env:
-      - name: CYBERARK_APP_ID
+  safe:
+    description: the name of the safe to be queried.
+    default: None
+  keywords:
+    description: keywords to limit the resultset to 1.
+    default: None
   validate_certs:
     description: Flag to control SSL certificate validation
     type: boolean
@@ -117,6 +119,7 @@ class CyberArkPasswordVaultConnector:
         if headers is None:
             headers = {
                 'Content-Type': 'application/json'
+                #'x-api-key': '106ab2b87ed945118f3e67be74ce06b1'
             }
 
         if self._session_token is not None:
@@ -149,7 +152,7 @@ class CyberArkPasswordVaultConnector:
         payload = json.dumps({
             "username": self.cyberark_username,
             "password": self.cyberark_password,
-            "useRadiusAuthentication": "%s" % self.cyberark_use_radius_authentication,
+            "useRadiusAuthentication": "{radius}".format(radius=self.cyberark_use_radius_authentication).lower(),
             "connectionNumber": "1"
         }, indent=2, sort_keys=False)
 
@@ -173,9 +176,9 @@ class CyberArkPasswordVaultConnector:
         """This method enables users to retrieve the password of an
         existing account that is identified by its Account ID.
         """
-
+        display.vvvv('safe: %s, keywords: %s' % (safe, keywords))
         response = self.request(
-            api_endpoint='WebServices/PIMServices.svc/Accounts/',
+            api_endpoint='WebServices/PIMServices.svc/Accounts',
             params={'Safe': safe, 'Keywords': keywords}
         )
 
@@ -227,9 +230,13 @@ class LookupModule(LookupBase):
             'validate_certs': self.get_option('validate_certs'),
             'use_proxy': self.get_option('use_proxy')
         }
-
+        display.vvvv("terms\n%s" % terms)
         with CyberArkPasswordVaultConnector(self._options, **_kwargs) as vault:
-            account_details = vault.get_account_details(safe="jelle", keywords="jelle")
+
+            account_details = vault.get_account_details(
+                safe=self.get_option('safe'),
+                keywords=self.get_option('keywords'),
+            )
             display.vvvv("%s" % account_details)
             if account_details["Count"] != 1:
                 raise AnsibleError("Search result contains no accounts or more than 1 account")
@@ -239,4 +246,3 @@ class LookupModule(LookupBase):
             )
 
         return [password]
-        
