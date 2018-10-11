@@ -293,8 +293,6 @@ class LookupModule(LookupBase):
                         'passprops': passprops
                     })
 
-
                 ret.append(result)
-            display.vvvv("account_details: %s" % ret)
 
         return ret
