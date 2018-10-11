@@ -4,9 +4,18 @@
 - hosts: localhost
   connection: local
   vars:
+    keywords:
+      - 'test'
+      - 'ansible'
     safe: 'MY_SAFE'
-    keywords: 'test'
-    password_lookup: "{{lookup('cyberarkpasswordvault', keywords=keywords, safe=safe, validate_certs=False)}}"
   tasks:
     - debug:
-        var: password_lookup
+        msg: "{{lookup('cyberarkpasswordvault', 'test', safe=safe, passprops=True, validate_certs=False)}}"
+
+    - debug:
+        var: item
+      loop: "{{query('cyberarkpasswordvault', 'ansible', 'test', safe=safe, validate_certs=False)}}"
+
+    - debug:
+        var: item
+      loop: "{{query('cyberarkpasswordvault', keywords=keywords, safe=safe, validate_certs=False)}}"

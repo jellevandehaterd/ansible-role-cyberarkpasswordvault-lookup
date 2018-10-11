@@ -2,6 +2,7 @@
 # (c) 2018 Ansible Project
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 from __future__ import (absolute_import, division, print_function)
+
 __metaclass__ = type
 
 ANSIBLE_METADATA = {'metadata_version': '1.1',
@@ -16,6 +17,11 @@ short_description: get secrets from CyberArk Privileged Account Security
 description:
   - Uses CyberArk Privileged Account Security REST API to fetch credentials
 options :
+  _terms:
+    description: The keyword(s) to look up
+    required: True
+  keywords:
+    description: The keyword(s) to look up supplied as a list
   cyberark_url:
     description: url of cyberark PAS.
     env: 
@@ -38,9 +44,10 @@ options :
   safe:
     description: the name of the safe to be queried.
     default: None
-  keywords:
-    description: keywords to limit the resultset to 1.
-    default: None
+  passprops:
+    description: Fetch properties assigned to the entry
+    type: boolean
+    default: False
   validate_certs:
     description: Flag to control SSL certificate validation
     type: boolean
@@ -56,17 +63,24 @@ EXAMPLES = """
 """
 
 RETURN = """
+  username:
+    description:
+      - The username
   password:
     description:
       - The actual value stored
   passprops:
-    description: properties assigned to the entry
+    description: 
+      - Properties assigned to the entry
     type: dictionary
   passwordchangeinprocess:
-    description: did the password change?
+    description: 
+      - Did the password change?
+    type: boolean
 """
 
 import os
+import re
 import json
 
 from datetime import datetime
@@ -76,6 +90,8 @@ from ansible.module_utils._text import to_text, to_native
 from ansible.module_utils.urls import open_url, ConnectionError, SSLValidationError
 from ansible.module_utils.six.moves.urllib.parse import urlencode
 from ansible.module_utils.six.moves.urllib.error import HTTPError, URLError
+import logging
+from ansible import constants as C
 
 try:
     from __main__ import display
@@ -93,21 +109,23 @@ ANSIBLE_CYBERARK_USE_RADIUS_AUTHENTICATION = os.getenv('CYBERARK_USE_RADIUS_AUTH
 
 class CyberArkPasswordVaultConnector:
 
-    def __init__(self, options, **kwargs):
+    def __init__(self, options):
         """Handles the authentication against the API and calls the appropriate API
         endpoints.
         """
         self._session_token = None
-        self.cyberark_url = options.get('cyberark_url', ANSIBLE_CYBERARK_URL)
-        self.cyberark_username = options.get('cyberark_username', ANSIBLE_CYBERARK_USERNAME)
-        self.cyberark_password = options.get('cyberark_password', ANSIBLE_CYBERARK_PASSWORD)
-        self.cyberark_app_id = options.get('cyberark_app_id', ANSIBLE_CYBERARK_APP_ID)
-        self.cyberark_use_radius_authentication = options.get('cyberark_use_radius_authentication', ANSIBLE_CYBERARK_USE_RADIUS_AUTHENTICATION)
-        self._kwargs = kwargs
+        self._options = options
+        self.cyberark_url = self._options.get('cyberark_url', ANSIBLE_CYBERARK_URL)
+        self.cyberark_username = self._options.get('cyberark_username', ANSIBLE_CYBERARK_USERNAME)
+        self.cyberark_password = self._options.get('cyberark_password', ANSIBLE_CYBERARK_PASSWORD)
+        self.cyberark_app_id = self._options.get('cyberark_app_id', ANSIBLE_CYBERARK_APP_ID)
+        self.cyberark_use_radius_authentication = self._options.get('cyberark_use_radius_authentication', ANSIBLE_CYBERARK_USE_RADIUS_AUTHENTICATION)
+
 
     def __enter__(self):
-        self.logon()
-        display.vvvv("CyberArk lookup: Logon succesfull")
+        if not self._session_token:
+            self.logon()
+            display.vvvv("CyberArk lookup: Logon succesfull")
         return self
 
     def __exit__(self, *args):
@@ -137,7 +155,14 @@ class CyberArkPasswordVaultConnector:
             params = urlencode(params.items())
             url = '{url}?{querystring}'.format(url=url, querystring=params)
         try:
-            response = open_url(url=url, data=data, headers=headers, method=method, **self._kwargs)
+            response = open_url(
+                url=url,
+                data=data,
+                headers=headers,
+                method=method,
+                validate_certs=self._options.get('validate_certs', True),
+                use_proxy=self._options.get('use_proxy', True)
+            )
         except HTTPError as e:
             raise AnsibleError("Received HTTP error for %s : %s" % (url, to_native(e)))
         except URLError as e:
@@ -227,24 +252,49 @@ class LookupModule(LookupBase):
 
     def run(self, terms, variables=None, **kwargs):
 
+        if not isinstance(terms, list):
+            terms = [terms]
+
+        if 'keywords' in kwargs:
+            terms = kwargs.pop('keywords')
+            kwargs.update({'_terms': terms})
+
+        ret = []
+
         self.set_options(direct=kwargs)
-        _kwargs = {
-            'validate_certs': self.get_option('validate_certs'),
-            'use_proxy': self.get_option('use_proxy')
-        }
-        display.vvvv("terms\n%s" % terms)
-        with CyberArkPasswordVaultConnector(self._options, **_kwargs) as vault:
+        display.vvvv("self._options: %s" % self._options)
+        with CyberArkPasswordVaultConnector(self._options) as vault:
 
-            account_details = vault.get_account_details(
-                safe=self.get_option('safe'),
-                keywords=self.get_option('keywords'),
-            )
+            for term in terms:
+                account_details = vault.get_account_details(
+                    safe=self.get_option('safe'),
+                    keywords=term,
+                )
 
-            if account_details["Count"] != 1:
-                raise AnsibleError("Search result contains no accounts or more than 1 account")
+                if account_details["Count"] != 1:
+                    raise AnsibleError("Search result contains no accounts or more than 1 account")
 
-            password = vault.get_password_value(
-                account_details["accounts"][0]["AccountID"]
-            )
+                result = dict()
+                result.update({
+                    'username':
+                    filter(lambda u: u['Key'] == 'UserName', account_details["accounts"][0]['Properties'])[0]['Value']
+                })
+                result.update({
+                    'password': vault.get_password_value(account_details["accounts"][0]["AccountID"])
+                })
 
-        return [password]
+                if self.get_option('passprops'):
+                    passprops = dict()
+                    passprops.update({
+                        prop['Key'].lower(): prop['Value'] for prop in account_details["accounts"][0]['Properties']
+                    })
+                    passprops.pop('username')  # redundant
+                    result.update({
+                        'passprops': passprops
+                    })
+
+
+                ret.append(result)
+            display.vvvv("account_details: %s" % ret)
+
+        return ret
