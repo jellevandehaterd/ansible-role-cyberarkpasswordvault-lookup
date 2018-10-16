@@ -63,9 +63,6 @@ EXAMPLES = """
 """
 
 RETURN = """
-  username:
-    description:
-      - The username
   password:
     description:
       - The actual value stored
@@ -73,14 +70,9 @@ RETURN = """
     description: 
       - Properties assigned to the entry
     type: dictionary
-  passwordchangeinprocess:
-    description: 
-      - Did the password change?
-    type: boolean
 """
 
 import os
-import re
 import json
 
 from datetime import datetime
@@ -90,8 +82,6 @@ from ansible.module_utils._text import to_text, to_native
 from ansible.module_utils.urls import open_url, ConnectionError, SSLValidationError
 from ansible.module_utils.six.moves.urllib.parse import urlencode
 from ansible.module_utils.six.moves.urllib.error import HTTPError, URLError
-import logging
-from ansible import constants as C
 
 try:
     from __main__ import display
@@ -121,7 +111,6 @@ class CyberArkPasswordVaultConnector:
         self.cyberark_app_id = self._options.get('cyberark_app_id', ANSIBLE_CYBERARK_APP_ID)
         self.cyberark_use_radius_authentication = self._options.get('cyberark_use_radius_authentication', ANSIBLE_CYBERARK_USE_RADIUS_AUTHENTICATION)
 
-
     def __enter__(self):
         if not self._session_token:
             self.logon()
@@ -149,11 +138,12 @@ class CyberArkPasswordVaultConnector:
             base_url=self.cyberark_url,
             api_endpoint=api_endpoint
         )
-        display.vvvv("CyberArk lookup: connecting to API endpoint %s" % url)
 
         if params:
             params = urlencode(params.items())
             url = '{url}?{querystring}'.format(url=url, querystring=params)
+
+        display.vvvv("CyberArk lookup: connecting to API endpoint %s" % url)
         try:
             response = open_url(
                 url=url,
@@ -226,6 +216,7 @@ class CyberArkPasswordVaultConnector:
 
         return to_text(response.read())
 
+    #TODO add api V10 support
     def get_password_value_v10(self):
         """This method enables users to retrieve the password or SSH key of an existing account that is identified
         by its Account ID. It enables users to specify a reason and ticket ID, if required.
@@ -262,7 +253,7 @@ class LookupModule(LookupBase):
         ret = []
 
         self.set_options(direct=kwargs)
-        display.vvvv("self._options: %s" % self._options)
+
         with CyberArkPasswordVaultConnector(self._options) as vault:
 
             for term in terms:
@@ -275,10 +266,6 @@ class LookupModule(LookupBase):
                     raise AnsibleError("Search result contains no accounts or more than 1 account")
 
                 result = dict()
-                result.update({
-                    'username':
-                    filter(lambda u: u['Key'] == 'UserName', account_details["accounts"][0]['Properties'])[0]['Value']
-                })
                 result.update({
                     'password': vault.get_password_value(account_details["accounts"][0]["AccountID"])
                 })

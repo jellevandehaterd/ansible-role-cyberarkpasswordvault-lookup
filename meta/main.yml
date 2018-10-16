@@ -1,0 +1,54 @@
+
+galaxy_info:
+  author: Jelle van de Haterd
+  description: CyberArk Ansible Lookup plugin for Credential Retrieval using Cyberark REST API.
+  company: Developers.nl
+
+  license: MIT
+
+  min_ansible_version: 2.2
+
+  platforms:
+  - name: OpenBSD
+    versions:
+    - all
+  - name: Fedora
+    versions:
+    - all
+  - name: MacOSX
+    versions:
+    - all
+  - name: GenericBSD
+    versions:
+    - all
+  - name: GenericLinux
+    versions:
+    - all
+  - name: Ubuntu
+    versions:
+    - all
+  - name: Debian
+    versions:
+    - all
+  - name: EL
+    versions:
+    - all
+  - name: opensuse
+    versions:
+    - all
+  - name: SLES
+    versions:
+    - all
+  - name: Solaris
+    versions:
+    - all
+
+  galaxy_tags:
+  - identity
+  - password
+  - privileged
+  - vault
+  - cyberark
+  - REST
+
+dependencies: []

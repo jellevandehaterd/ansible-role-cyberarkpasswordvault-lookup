@@ -8,6 +8,8 @@
       - 'test'
       - 'ansible'
     safe: 'MY_SAFE'
+  roles:
+    - ansible-role-cyberarkpasswordvault-lookup
   tasks:
     - debug:
         msg: "{{lookup('cyberarkpasswordvault', 'test', safe=safe, passprops=True, validate_certs=False)}}"
@@ -18,4 +20,4 @@
 
     - debug:
         var: item
-      loop: "{{query('cyberarkpasswordvault', keywords=keywords, safe=safe, validate_certs=False)}}"
+      loop: "{{query('cyberarkpasswordvault', keywords=keywords, safe=safe, passprops=True, validate_certs=False)}}"
