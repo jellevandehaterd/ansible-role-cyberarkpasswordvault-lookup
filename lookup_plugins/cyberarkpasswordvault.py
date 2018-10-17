@@ -111,7 +111,10 @@ class CyberArkPasswordVaultConnector:
         self.cyberark_username = self._options.get('cyberark_username', ANSIBLE_CYBERARK_USERNAME)
         self.cyberark_password = self._options.get('cyberark_password', ANSIBLE_CYBERARK_PASSWORD)
         self.cyberark_app_id = self._options.get('cyberark_app_id', ANSIBLE_CYBERARK_APP_ID)
-        self.cyberark_use_radius_authentication = self._options.get('cyberark_use_radius_authentication', ANSIBLE_CYBERARK_USE_RADIUS_AUTHENTICATION)
+
+        self.cyberark_use_radius_authentication = False
+        if self._options.get('cyberark_use_radius_authentication', ANSIBLE_CYBERARK_USE_RADIUS_AUTHENTICATION):
+            self.cyberark_use_radius_authentication = True
 
     def __enter__(self):
         if not self._session_token:
@@ -133,7 +136,6 @@ class CyberArkPasswordVaultConnector:
         if method == 'POST' and data is None:
             headers.update({"Content-Length": 0})
         elif method == 'POST' and data is not None:
-            display.vvvv("%s" % data)
             headers.update({"Content-Length": len(data)})
 
         if self._session_token is not None:
@@ -172,6 +174,7 @@ class CyberArkPasswordVaultConnector:
             return response
 
     def logon(self):
+
         payload = json.dumps({
             "username": self.cyberark_username,
             "password": self.cyberark_password,
