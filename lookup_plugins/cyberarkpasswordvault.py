@@ -173,7 +173,7 @@ class CyberArkPasswordVaultConnector:
         payload = json.dumps({
             "username": self.cyberark_username,
             "password": self.cyberark_password,
-            "useRadiusAuthentication": "{radius}".format(radius=self.cyberark_use_radius_authentication).lower(),
+            "useRadiusAuthentication": "{radius}".format(radius=str(self.cyberark_use_radius_authentication).lower()),
             "connectionNumber": "1"
         }, indent=2, sort_keys=False)
 
