@@ -275,7 +275,7 @@ class LookupModule(LookupBase):
                     passprops.update({
                         prop['Key'].lower(): prop['Value'] for prop in account_details["accounts"][0]['Properties']
                     })
-                    passprops.pop('username')  # redundant
+
                     result.update({
                         'passprops': passprops
                     })

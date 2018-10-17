@@ -37,6 +37,8 @@ Injector configuration:
     ---
     - hosts: localhost
       connection: local
+      roles:
+        - ansible-role-cyberarkpasswordvault-lookup
       vars:
         safe: 'MY_SAFE'
         keywords: 'test'
