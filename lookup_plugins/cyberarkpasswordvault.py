@@ -130,6 +130,9 @@ class CyberArkPasswordVaultConnector:
 
         if method == 'POST' and data is None:
             headers.update({"Content-Length": 0})
+        elif method == 'POST' and data is not None:
+            display.vvvv("%s" % data)
+            headers.update({"Content-Length": len(data)})
 
         if self._session_token is not None:
             headers['Authorization'] = self._session_token
@@ -143,6 +146,7 @@ class CyberArkPasswordVaultConnector:
             params = urlencode(params.items())
             url = '{url}?{querystring}'.format(url=url, querystring=params)
 
+        display.vvvv("CyberArk lookup: headers %s" % headers)
         display.vvvv("CyberArk lookup: connecting to API endpoint %s" % url)
         try:
             response = open_url(
