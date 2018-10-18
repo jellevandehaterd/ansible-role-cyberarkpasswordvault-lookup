@@ -259,7 +259,7 @@ class LookupModule(LookupBase):
 
         ret = []
 
-        self.set_options(direct=kwargs)
+        self.set_options(var_options=variables, direct=kwargs)
 
         with CyberArkPasswordVaultConnector(self._options) as vault:
 
@@ -278,13 +278,10 @@ class LookupModule(LookupBase):
                 })
 
                 if self.get_option('passprops'):
-                    passprops = dict()
-                    passprops.update({
-                        prop['Key'].lower(): prop['Value'] for prop in account_details["accounts"][0]['Properties']
-                    })
 
-                    result.update({
-                        'passprops': passprops
+                    result['passprops'] = dict()
+                    result['passprops'].update({
+                        prop['Key'].lower(): prop['Value'] for prop in account_details["accounts"][0]['Properties']
                     })
 
                 ret.append(result)
