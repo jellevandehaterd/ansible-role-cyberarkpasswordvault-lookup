@@ -37,12 +37,21 @@ Injector configuration:
     ---
     - hosts: localhost
       connection: local
+      vars:
+          cyberark_safe: "{{ my_safe_name }}"
+          cyberark_connection:
+             validate_certs: True
+             url: '{{ my_cyberark_url}}'
+             username: "{{ my_username }}"
+             password: "{{ my_password }}"
+             use_radius_authentication: False
+             
       roles:
         - ansible-role-cyberarkpasswordvault-lookup
-      vars:
-        safe: 'MY_SAFE'
-        keywords: 'test'
-        password_lookup: "{{lookup('cyberarkpasswordvault', keywords=keywords, safe=safe, validate_certs=False)}}"
       tasks:
+         - debug:
+            msg: "{{lookup('cyberarkpasswordvault', 'test, localhost', passprops=True, errors='warn')}}"
+    
         - debug:
-            var: password_lookup
+            var: item
+          loop: "{{query('cyberarkpasswordvault', keywords, passprops=True, errors='warn')}}"

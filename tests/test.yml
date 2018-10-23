@@ -4,20 +4,20 @@
 - hosts: localhost
   connection: local
   vars:
-    keywords:
-      - 'test'
-      - 'ansible'
-    safe: 'MY_SAFE'
+    cyberark_safe: "{{ my_safe_name }}"
+    cyberark_connection:
+      validate_certs: True
+      url: '{{ my_cyberark_url}}'
+      username: "{{ my_username }}"
+      password: "{{ my_password }}"
+      use_radius_authentication: False
+
   roles:
-    - ansible-role-cyberarkpasswordvault-lookup
+  - ansible-role-cyberarkpasswordvault-lookup
   tasks:
-    - debug:
-        msg: "{{lookup('cyberarkpasswordvault', 'test', safe=safe, passprops=True, validate_certs=False)}}"
+  - debug:
+      msg: "{{lookup('cyberarkpasswordvault', 'test, localhost', passprops=True, errors='warn')}}"
 
-    - debug:
-        var: item
-      loop: "{{query('cyberarkpasswordvault', 'ansible', 'test', safe=safe, validate_certs=False)}}"
-
-    - debug:
-        var: item
-      loop: "{{query('cyberarkpasswordvault', keywords=keywords, safe=safe, passprops=True, validate_certs=False)}}"
+  - debug:
+      var: item
+    loop: "{{query('cyberarkpasswordvault', keywords, passprops=True, errors='warn')}}"

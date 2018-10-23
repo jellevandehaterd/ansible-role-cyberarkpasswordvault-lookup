@@ -16,50 +16,70 @@ version_added: "2.6"
 short_description: get secrets from CyberArk Privileged Account Security
 description:
   - Uses CyberArk Privileged Account Security REST API to fetch credentials
-options :
-  _terms:
-    description: The keyword(s) to look up
-    required: True
-  keywords:
-    description: The keyword(s) to look up supplied as a list
-  cyberark_url:
-    description: url of cyberark PAS.
-    env: 
-     - name: CYBERARK_URL
-  cyberark_username:
-    description: cyberark authentication username.
-    env:
-      - name: CYBERARK_USERNAME
-    default: admin
-  cyberark_password:
-    description: cyberark authentication password.
-    env:
-      - name: CYBERARK_PASSWORD
-    default: admin
-  cyberark_use_radius_authentication:
-    description: use radius for cyberark authentication.
-    env:
-      - name: CYBERARK_USE_RADIUS_AUTHENTICATION
-    default: false
+  
+options:
   safe:
     description: the name of the safe to be queried.
-    default: None
+    vars:
+      - name: cyberark_safe
   passprops:
     description: Fetch properties assigned to the entry
     type: boolean
     default: False
-  validate_certs:
-    description: Flag to control SSL certificate validation
-    type: boolean
-    default: True
-  use_proxy:
-    description: Flag to control if the lookup will observe HTTP proxy environment variables when present.
-    type: boolean
-    default: True   
+    vars:
+      - name: cyberark_passprops
+      
+  cyberark_connection:
+    required: true
+    description: Default endpoint connection information
+    vars:
+      - name: cyberark_connection
+    suboptions:
+      url:
+        description: url of cyberark PAS.
+        env: 
+         - name: CYBERARK_URL
+        vars:
+          - name: url
+        required: True
+      username:
+        description: cyberark authentication username.
+        env:
+          - name: CYBERARK_USERNAME
+        vars:
+          - name: username
+        required: True
+      password:
+        description: cyberark authentication password.
+        env:
+          - name: CYBERARK_PASSWORD
+        vars:
+          - name: password 
+        required: True
+      use_radius_authentication:
+        description: use radius for cyberark authentication.
+        env:
+          - name: CYBERARK_USE_RADIUS_AUTHENTICATION
+        default: false
+        vars:
+          - name: use_radius_authentication
+      validate_certs:
+        description: Flag to control SSL certificate validation
+        type: boolean
+        default: True
+        vars:
+          - name: validate_certs
+      use_proxy:
+        description: Flag to control if the lookup will observe HTTP proxy environment variables when present.
+        type: boolean
+        default: True
+        vars:
+          - name: use_proxy
 """
 
 EXAMPLES = """
-  
+  vars:
+    test: test
 """
 
 RETURN = """
@@ -93,7 +113,6 @@ except ImportError:
 ANSIBLE_CYBERARK_URL = os.getenv('CYBERARK_URL', None)
 ANSIBLE_CYBERARK_USERNAME = os.getenv('CYBERARK_USERNAME', None)
 ANSIBLE_CYBERARK_PASSWORD = os.getenv('CYBERARK_PASSWORD', None)
-ANSIBLE_CYBERARK_APP_ID = os.getenv('CYBERARK_APP_ID', None)
 ANSIBLE_CYBERARK_USE_RADIUS_AUTHENTICATION = os.getenv('CYBERARK_USE_RADIUS_AUTHENTICATION', False)
 
 
@@ -105,12 +124,9 @@ class CyberArkPasswordVaultConnector:
         """
         self._session_token = None
         self._options = options
-        self.cyberark_url = self._options.get('cyberark_url', ANSIBLE_CYBERARK_URL)
-        self.cyberark_username = self._options.get('cyberark_username', ANSIBLE_CYBERARK_USERNAME)
-        self.cyberark_password = self._options.get('cyberark_password', ANSIBLE_CYBERARK_PASSWORD)
-        self.cyberark_app_id = self._options.get('cyberark_app_id', ANSIBLE_CYBERARK_APP_ID)
-
+        self.cyberark_connection = self._options.get('cyberark_connection', dict())
         self.cyberark_use_radius_authentication = False
+
         if self._options.get('cyberark_use_radius_authentication', ANSIBLE_CYBERARK_USE_RADIUS_AUTHENTICATION):
             self.cyberark_use_radius_authentication = True
 
@@ -140,7 +156,7 @@ class CyberArkPasswordVaultConnector:
             headers['Authorization'] = self._session_token
 
         url = '{base_url}/PasswordVault/{api_endpoint}'.format(
-            base_url=self.cyberark_url,
+            base_url=self.cyberark_connection.get('url', ANSIBLE_CYBERARK_URL),
             api_endpoint=api_endpoint
         )
 
@@ -148,7 +164,6 @@ class CyberArkPasswordVaultConnector:
             params = urlencode(params.items())
             url = '{url}?{querystring}'.format(url=url, querystring=params)
 
-        display.vvvv("CyberArk lookup: headers %s" % headers)
         display.vvvv("CyberArk lookup: connecting to API endpoint %s" % url)
         try:
             response = open_url(
@@ -174,8 +189,8 @@ class CyberArkPasswordVaultConnector:
     def logon(self):
 
         payload = json.dumps({
-            "username": self.cyberark_username,
-            "password": self.cyberark_password,
+            "username": self.cyberark_connection.get('username', ANSIBLE_CYBERARK_USERNAME),
+            "password": self.cyberark_connection.get('password', ANSIBLE_CYBERARK_PASSWORD),
             "useRadiusAuthentication": "{radius}".format(radius=str(self.cyberark_use_radius_authentication).lower()),
             "connectionNumber": "1"
         }, indent=2, sort_keys=False)
@@ -252,13 +267,11 @@ class LookupModule(LookupBase):
 
         if not isinstance(terms, list):
             terms = [terms]
-
-        if 'keywords' in kwargs:
-            terms = kwargs.pop('keywords')
-            kwargs.update({'_terms': terms})
+        elif isinstance(terms, list) and len(terms) == 1:
+            if isinstance(terms[0], list):
+                terms = terms[0]
 
         ret = []
-
         self.set_options(var_options=variables, direct=kwargs)
 
         with CyberArkPasswordVaultConnector(self._options) as vault:
