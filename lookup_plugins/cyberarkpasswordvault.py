@@ -171,8 +171,8 @@ class CyberArkPasswordVaultConnector:
                 data=data,
                 headers=headers,
                 method=method,
-                validate_certs=self._options.get('validate_certs', True),
-                use_proxy=self._options.get('use_proxy', True)
+                validate_certs=self.cyberark_connection.get('validate_certs', True),
+                use_proxy=self.cyberark_connection.get('use_proxy', True)
             )
         except HTTPError as e:
             raise AnsibleError("Received HTTP error for %s : %s" % (url, to_native(e)))
