@@ -30,10 +30,10 @@ options:
       - name: cyberark_passprops
       
   cyberark_connection:
-    required: true
     description: Default endpoint connection information
     vars:
       - name: cyberark_connection
+    default: {}
     suboptions:
       url:
         description: url of cyberark PAS.
@@ -127,7 +127,7 @@ class CyberArkPasswordVaultConnector:
         self.cyberark_connection = self._options.get('cyberark_connection', dict())
         self.cyberark_use_radius_authentication = False
 
-        if self._options.get('cyberark_use_radius_authentication', ANSIBLE_CYBERARK_USE_RADIUS_AUTHENTICATION):
+        if self.cyberark_connection.get('cyberark_use_radius_authentication', ANSIBLE_CYBERARK_USE_RADIUS_AUTHENTICATION):
             self.cyberark_use_radius_authentication = True
 
     def __enter__(self):
