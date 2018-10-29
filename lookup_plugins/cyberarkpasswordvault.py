@@ -140,7 +140,7 @@ class CyberArkPasswordVaultConnector:
         )
 
         if params:
-            params = urlencode(params.items())
+            params = urlencode(params)
             url = '{url}?{querystring}'.format(url=url, querystring=params)
 
         display.vvvv("CyberArk lookup: connecting to API endpoint %s" % url)
