@@ -41,7 +41,8 @@ Injector configuration:
         - ansible-role-cyberarkpasswordvault-lookup
       vars:
         safe: 'MY_SAFE'
-        keywords: 'test'
+        keywords: 
+        - test
         password_lookup: "{{lookup('cyberarkpasswordvault', keywords=keywords, safe=safe, validate_certs=False)}}"
       tasks:
         - debug:

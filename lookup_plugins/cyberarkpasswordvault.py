@@ -3,6 +3,8 @@
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 from __future__ import (absolute_import, division, print_function)
 
+from os import getpid
+
 __metaclass__ = type
 
 ANSIBLE_METADATA = {'metadata_version': '1.1',
@@ -170,7 +172,10 @@ class CyberArkPasswordVaultConnector:
             "username": self.cyberark_username,
             "password": self.cyberark_password,
             "useRadiusAuthentication": "{radius}".format(radius=self.cyberark_use_radius_authentication).lower(),
-            "connectionNumber": "1"
+            # This is intended to ensure the following:
+            # - The number is between 1 and 100
+            # - Every ansible fork gets a different number to ensure concurrency.
+            "connectionNumber": "%s" % ((getpid() % 99) + 1)
         }, indent=2, sort_keys=False)
 
         response = self.request(
