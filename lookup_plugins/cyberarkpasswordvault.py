@@ -301,7 +301,7 @@ class LookupModule(LookupBase):
         self.set_options(var_options=variables, direct=kwargs)
 
         with CyberArkPasswordVaultConnector(self._options) as vault:
-            display.vvvv('%s' % terms)
+
             for term in terms:
                 account_details = vault.get_account_details(
                     safe=self._templar.template(self.get_option('safe'), fail_on_undefined=True),
@@ -311,7 +311,6 @@ class LookupModule(LookupBase):
                 if account_details["Count"] != 1:
                     raise AnsibleError("Search result contains no accounts or more than 1 account")
 
-                display.vvvv('%s' % account_details)
                 result = dict()
                 password = vault.get_password_value(account_details["accounts"][0]["AccountID"])
 
