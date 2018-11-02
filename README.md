@@ -42,7 +42,7 @@ Below examples assume the variables specified above are set.
         
     - name: Request passwords and password properties(passprops) for multiple accounts. 
       debug:
-        msg: "Username: {{item.passprops.username}}, Passord: {{ item.password }}"
+        msg: "Username: {{item.passprops.username}}, Password: {{ item.password }}"
       with_items: "{{lookup('cyberarkpasswordvault', 'one, foo', 'two, bar', passprops=True)}}"
 
     - debug:
