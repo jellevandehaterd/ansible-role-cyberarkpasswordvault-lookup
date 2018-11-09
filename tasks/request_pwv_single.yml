@@ -1,0 +1,45 @@
+---
+- fail: 
+    msg: "Bailing out. Requires a reason for creating password vault requests: 'pwv_reason'"
+  when: pwv_reason is not defined
+  delegate_to: localhost
+- fail: 
+    msg: "Bailing out. Requires a time period (in seconds) for how long the requests should be valid: 'pwv_request_period'"
+  when: pwv_request_period is not defined
+  delegate_to: localhost
+- fail: 
+    msg: "Bailing out. Requires a cyberark_login_token."
+  when: cyberark_login_token is not defined
+  delegate_to: localhost
+
+- debug: 
+    msg: "loop for: {{host_item}}"
+  delegate_to: localhost
+
+- uri:
+    url: "{{cyberark_url}}/PasswordVault/WebServices/PIMServices.svc/Accounts?Keywords=root@{{host_item}}"
+    return_content: yes
+    headers:
+      Authorization: "{{cyberark_login_token}}"
+      "Content-Type": "application/json"
+  register: search_response
+  delegate_to: localhost
+
+- debug:
+    msg: "accountID: {{search_response['json']['accounts'][0]['AccountID']}}"
+  delegate_to: localhost
+
+- uri:
+    url: "{{cyberark_url}}/PasswordVault/API/MyRequests"
+    method: POST
+    return_content: yes
+    body: "{{ lookup('template', 'request_body.json') }}"
+    body_format: json
+    headers:
+      Authorization: "{{cyberark_login_token}}"
+    status_code: 201
+  delegate_to: localhost
+
+
+
+
