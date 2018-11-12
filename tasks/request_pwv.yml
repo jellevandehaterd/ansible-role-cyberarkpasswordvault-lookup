@@ -1,4 +1,4 @@
-
+---
 - fail: 
     msg: "Bailing out. Requires a reason for creating password vault requests: 'pwv_reason'"
   when: pwv_reason is not defined
@@ -28,6 +28,7 @@
     body_format: json
   register: pwv_login_token
   delegate_to: localhost
+  run_once: true
 
 - include_tasks: 'tasks/request_pwv_single.yml'
   vars: 
