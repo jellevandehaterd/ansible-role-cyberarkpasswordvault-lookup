@@ -285,14 +285,16 @@ class CyberArkPasswordVaultConnector:
             "MultipleAccessRequired": True,
         }, indent=2, sort_keys=False)
 
+        display.v(payload)
+
         response = self.request(
             api_endpoint='API/MyRequests',
             data=payload,
             method='POST'
         )
 
-        if response.status != 201:
-            raise PWVRequestInvalid(0, "unexpected return code", "%s instead of 201" % response.status_code)
+        # if response.status != 201:
+        #     raise PWVRequestInvalid(0, "unexpected return code", "%s instead of 201" % response.status_code)
 
         response = json.loads(response.read())
 
