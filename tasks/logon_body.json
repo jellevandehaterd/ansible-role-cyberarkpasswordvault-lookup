@@ -1,6 +1,0 @@
-{
-  "username":"{{cyberark_username}}",
-  "password":"{{cyberark_password}}",
-  "useRadiusAuthentication":"false",
-  "connectionNumber":"1"
-}
