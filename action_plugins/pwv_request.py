@@ -303,6 +303,10 @@ class CyberArkPasswordVaultConnector:
 
         return response['RequestID']
 
+
+
+
+
 class ActionModule(ActionBase):
 
     TRANSFERS_FILES = False
@@ -325,7 +329,7 @@ class ActionModule(ActionBase):
         validate_certs = boolean(self._task.args.get('validate_certs', True), strict=False)
         use_proxy = boolean(self._task.args.get('use_proxy', True), strict=False)
 
-        name  = self._task.args.get('name')
+        keywords  = self._task.args.get('keywords')
         safe = self._task.args.get('safe')
         reason = self._task.args.get('reason')
         wait = boolean(self._task.args.get('wait', True), strict=False)
@@ -348,40 +352,53 @@ class ActionModule(ActionBase):
         }
 
         with CyberArkPasswordVaultConnector(options) as vault:
+            result['results'] =[]
+            for name in keywords:
+                single_result = self.request_password(name, safe, vault, wait, reason, period)
 
-            accountID, account_details = vault.get_single_account(
-                safe=self._templar.template(safe, fail_on_undefined=True),
-                search=self._templar.template(name, fail_on_undefined=True),
-            )
+                if 'failure' in single_result:
+                    result['failed'] = True
+                    result['msg'] = result['failure']
+                    return result
 
-            display.v("account_details: %s " % account_details)
-
-            try:
-                request = vault.get_request(name, safe)
-                if not request:
-                    vault.create_request(accountID, reason, period)
-                    request = vault.get_request(name, safe)
-            except PWVRequestInvalid as e:
-                raise AnsibleError("could create request: %s" % e )
-
-            if not request:
-                raise AnsibleError("passwordvault request could not be found or created. Reason unknown")
-
-            success, status, reason = vault.wait_for_request_final_state(request['RequestID'])
-            if not success:
-                raise AnsibleError("passwordvault request failed: %s - %s" % (status, reason))
-
-            try:
-                password = vault.get_password_value(account_details['AccountID'])
-                result.update({'password': password, 'safe': safe})
-            except PWVAccountLocked as e:
-                result['failed'] = True
-                result['msg'] = u"Account Locked: %s" % to_text(e)
-                return result
-            except PWVAccountNoRequest as e:
-                result['failed'] = True
-                result['msg'] = u"No Request: %s" % to_text(e)
-                return result
-
+                result['results'].append(single_result)
 
         return result
+
+
+
+    def request_password(self, name, safe, vault, wait, reason, period):
+        result = {}
+
+        accountID, account_details = vault.get_single_account(
+            safe=self._templar.template(safe, fail_on_undefined=True),
+            search=self._templar.template(name, fail_on_undefined=True),
+        )
+
+        display.v("account_details: %s " % account_details)
+
+        try:
+            request = vault.get_request(name, safe)
+            if not request:
+                vault.create_request(accountID, reason, period)
+                request = vault.get_request(name, safe)
+        except PWVRequestInvalid as e:
+            raise AnsibleError("could create request: %s" % e )
+
+        if not request:
+            raise AnsibleError("passwordvault request could not be found or created. Reason unknown")
+
+        if not wait:
+            return {}
+
+        success, status, reason = vault.wait_for_request_final_state(request['RequestID'])
+        if not success:
+            raise AnsibleError("passwordvault request failed: %s - %s" % (status, reason))
+            
+        try:
+            password = vault.get_password_value(account_details['AccountID'])
+            return {'keyword': name, 'password': password, 'safe': safe}
+        except PWVAccountLocked as e:
+            return {'failure': u"Account Locked: %s" % to_text(e) }
+        except PWVAccountNoRequest as e:
+            return {'failure': u"No Request: %s" % to_text(e) }
