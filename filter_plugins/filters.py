@@ -6,7 +6,7 @@ def remove_prefix_list(list_, pattern):
     for line in list_:
         if line.startswith( pattern ):
             result.append(line[len(pattern):])
-    
+
     return result
 
 def remove_prefix(text, prefix):

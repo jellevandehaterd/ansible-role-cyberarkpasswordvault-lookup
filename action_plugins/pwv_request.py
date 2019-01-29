@@ -60,6 +60,11 @@ class PWVRequestInvalid(Exception):
         return "%s: %s" % (repr(self.status), repr(self.reason))
 
 
+def hasFailed(result, reason):
+    result['failed'] = True
+    result['msg'] = reason
+    return result
+
 class CyberArkPasswordVaultConnector:
 
     def __init__(self, options):
@@ -322,17 +327,31 @@ class ActionModule(ActionBase):
         result = super(ActionModule, self).run(tmp, task_vars)
         del tmp  # tmp no longer has any effect
 
-        url = self._task.args.get('url')
+        url = self._task.args.get('url', 'https://pwv.europe.intranet')
+
         username = self._task.args.get('username')
         password = self._task.args.get('password')
         use_radius_authentication = boolean(self._task.args.get('use_radius_authentication', True), strict=False)
         validate_certs = boolean(self._task.args.get('validate_certs', True), strict=False)
         use_proxy = boolean(self._task.args.get('use_proxy', True), strict=False)
 
-        keywords  = self._task.args.get('keywords')
+        keywords  = self._task.args.get('keywords', [])
         safe = self._task.args.get('safe')
         reason = self._task.args.get('reason')
         wait = boolean(self._task.args.get('wait', True), strict=False)
+
+        if not username:
+            return hasFailed(result, "username parameter should contain the loginname for the passwordvault")
+
+        if not password:
+            return hasFailed(result, "password parameter should contain the password for the passwordvault")
+
+        if isinstance(keywords, str): #convert a single keyword to a list with 1 entry
+            keywords = [ keywords ]
+
+        if len(keywords) == 0:
+            return hasFailed(result, "keywords parameter should contain a single keyword or a list of keywords.")
+
         try:
             period = int(self._task.args.get('period'))
         except ValueError as e:
@@ -358,7 +377,7 @@ class ActionModule(ActionBase):
 
                 if 'failure' in single_result:
                     result['failed'] = True
-                    result['msg'] = result['failure']
+                    result['msg'] = single_result['failure']
                     return result
 
                 result['results'].append(single_result)
@@ -394,7 +413,7 @@ class ActionModule(ActionBase):
         success, status, reason = vault.wait_for_request_final_state(request['RequestID'])
         if not success:
             raise AnsibleError("passwordvault request failed: %s - %s" % (status, reason))
-            
+
         try:
             password = vault.get_password_value(account_details['AccountID'])
             return {'keyword': name, 'password': password, 'safe': safe}

@@ -1,16 +1,21 @@
 
-# cyberarkpasswordvault 
-Role to add Ansible lookup plugin for usage with the CyberArk Passwordvault REST API
+# cyberarkpasswordvault
+Role to add plugins for usage with the CyberArk Passwordvault REST API
 
-Provided Plugin
+The plugins in this role provide the following:
 
-- **cyberarkpasswordvault**: Lookup module for CyberArk credential retrieval using CyberArk Passwordvault REST API. 
+- `cyberarkpasswordvault` lookup plugin for credentials without authorisation flow.
+- `pwv_request` task for credentials with an authorisation flow
+- `format_list` filter, allows for the formatting of a list of strings
+- `remove_prefix` filter, removes a static prefix on a string
+- `remove_prefix_list` filter, removes a static prefix on a list of strings
+
 
 # Variables
 
 For usage of this lookup plugin a connection needs to be made with cyberark.
-This can be done using a [**custom credential**](#ansible-tower-custom-credential) in Ansible Tower or 
-using Ansible Vault. 
+This can be done using a [**custom credential**](#ansible-tower-custom-credential) in Ansible Tower or
+using Ansible Vault.
 
 ```yaml
 # ansible vault
@@ -26,7 +31,7 @@ cyberark_connection:
 # Examples
 Below examples assume the variables specified above are set.
 
-1) Basic usage 
+1) Basic usage for credentials (no authorsation flow)
 ```yaml
 - hosts: webservers
   vars:
@@ -36,11 +41,11 @@ Below examples assume the variables specified above are set.
   roles:
       - ansible-role-cyberarkpasswordvault-lookup
   tasks:
-    - name: Request password for keyword 'foo, bar' 
+    - name: Request password for keyword 'foo, bar'
       debug:
         msg: "{{lookup('cyberarkpasswordvault', 'foo, bar')}}"
-        
-    - name: Request passwords and password properties(passprops) for multiple accounts. 
+
+    - name: Request passwords and password properties(passprops) for multiple accounts.
       debug:
         msg: "Username: {{item.passprops.username}}, Password: {{ item.password }}"
       with_items: "{{lookup('cyberarkpasswordvault', 'one, foo', 'two, bar', passprops=True)}}"
@@ -50,11 +55,11 @@ Below examples assume the variables specified above are set.
       loop: "{{query('cyberarkpasswordvault', keywords, passprops=True)}}"
 ```
 
-2) Usage password lookup in inventory
+2) Usage password lookup in inventory (no authorisation flow)
 
 The INI way:
 ```yaml
-#inventory file 
+#inventory file
 
 mail.example.com
 
@@ -93,12 +98,102 @@ all:
         three.example.com:
 ```
 
+3) Request the password of an NPA credentials and use it to login to the system (with authorisation flow)
+
+This example requests the credentials for the `ansible_log4all` NPA and uses it to login to systems.
+
+```yaml
+- name: Run whoami on all systems
+  hosts: all
+  gather_facts: false
+  roles:
+  - ansible-role-cyberarkpasswordvault-lookup
+  vars_prompt:
+    - name: "pwv_period"
+      prompt: "How long do we need the password (in seconds)?"
+      default: 3600
+    - name: "pwv_reason"
+      prompt: "Reason for passwordvault request"
+    - name: "corpkey_username"
+      prompt: your corporation key (used for ssh and passwordvault)
+    - name: "corpkey_password"
+      prompt: your corporation password (used for ssh and passwordvault)
+      private: true
+  vars:
+    npa_account: "ansible_log4all"
+  tasks:
+  - name: Request the credentials for the npa account
+    pwv_request:
+      keywords: "{{npa_account}}"
+      reason: "{{pwv_reason}}"
+      period: "{{pwv_period}}"
+      username: "{{corpkey_username}}"
+      password: "{{corpkey_password}}"
+      wait: true
+    register: pwv_result
+    become: false
+    delegate_to: localhost
+    run_once: yes
+  - name: set the ssh credentials to the npa account for each host
+    set_fact:
+      ansible_ssh_user: "{{npa_account}}"
+      ansible_ssh_pass: "{{ pwv_result.results[0].password}}"
+    no_log: true
+  - name: whoami
+    command: whoami
+```
 
 
-# Ansible Tower Custom Credential 
+4) Request root password for privilege escalation but use corpkey to login.
+
+```yaml
+- name: Run whoami on all systems
+  hosts: all
+  gather_facts: false
+  roles:
+  - ansible-role-cyberarkpasswordvault-lookup
+  vars_prompt:
+    - name: "pwv_period"
+      prompt: "How long do we need the password (in seconds)?"
+      default: 3600
+    - name: "pwv_reason"
+      prompt: "Reason for passwordvault request"
+    - name: "corpkey_username"
+      prompt: your corporation key (used for ssh and passwordvault)
+    - name: "corpkey_password"
+      prompt: your corporation password (used for ssh and passwordvault)
+      private: true
+  tasks:
+  - name: Request password from the passwordvault
+    pwv_request:
+      keywords: "{{ ansible_play_hosts | format_list('root@%s') }}"
+      reason: "{{pwv_reason}}"
+      period: "{{pwv_period}}"
+      username: "{{corpkey_username}}"
+      password: "{{corpkey_password}}"
+      wait: true
+    register: pwv_result
+    become: false
+    delegate_to: localhost
+    run_once: yes
+  - name: Set the ssh and become password for each host
+    set_fact:
+      ansible_ssh_user: "{{ corpkey_username }}"
+      ansible_ssh_pass: "{{ corpkey_password }}"
+      ansible_become_pass: "{{item.password}}"
+    delegate_to: "{{ item.keyword | remove_prefix('root@') }}"
+    with_items: "{{ pwv_result.results }}"
+    run_once: yes
+    no_log: true
+  - name: whoami
+    command: whoami
+```
+
+
+# Ansible Tower Custom Credential
 
 In ansible tower a [custom credential type](https://docs.ansible.com/ansible-tower/latest/html/userguide/credential_types.html)
-can be added using the yaml provided below. 
+can be added using the yaml provided below.
 
 Input configuration:
 ```yaml
@@ -117,13 +212,13 @@ fields:
     id: cyberark_use_radius_authentication
     label: Cyberark use radius authentication
     help_text: "Check only if Cyberark has radius authentication enabled"
-  
+
 required:
   - cyberark_url
   - cyberark_username
   - cyberark_password
 ```
-    
+
 
 Injector configuration:
 ```yaml
