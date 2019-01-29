@@ -18,7 +18,7 @@ version_added: "2.6"
 short_description: get secrets from CyberArk Privileged Account Security
 description:
   - Uses CyberArk Privileged Account Security REST API to fetch credentials
-  
+
 options:
   safe:
     description: the name of the safe to be queried.
@@ -30,7 +30,7 @@ options:
     default: False
     vars:
       - name: cyberark_passprops
-      
+
   cyberark_connection:
     description: Default endpoint connection information
     vars:
@@ -39,7 +39,7 @@ options:
     suboptions:
       url:
         description: url of cyberark PAS.
-        env: 
+        env:
          - name: CYBERARK_URL
         vars:
           - name: url
@@ -56,7 +56,7 @@ options:
         env:
           - name: CYBERARK_PASSWORD
         vars:
-          - name: password 
+          - name: password
         required: True
       use_radius_authentication:
         description: use radius for cyberark authentication.
@@ -79,7 +79,7 @@ options:
           - name: use_proxy
 """
 
-EXAMPLES = """ 
+EXAMPLES = """
   - name: Fetch password matching keyword 'ansible'
     debug: msg={{lookup('cyberarkpasswordvault', 'ansible')}}
     vars:
@@ -89,7 +89,7 @@ EXAMPLES = """
         password: "{{ my_password }}"
         validate_certs: true
         use_radius_authentication: false
-  
+
   - name: Fetch password matching keyword 'ansible'
     debug: msg={{lookup('cyberarkpasswordvault', 'ansible', passprops=true)}}
     vars:
@@ -100,7 +100,7 @@ EXAMPLES = """
         validate_certs: true
         use_radius_authentication: false
     register: passprops
-        
+
 
 """
 
@@ -109,7 +109,7 @@ RETURN = """
     description:
       - The actual value stored
   passprops:
-    description: 
+    description:
       - Properties assigned to the entry
     type: dictionary
 """
@@ -308,8 +308,14 @@ class LookupModule(LookupBase):
                     keywords=term,
                 )
 
-                if account_details["Count"] != 1:
-                    raise AnsibleError("Search result contains no accounts or more than 1 account")
+                if account_details["Count"] == 0:
+                    raise AnsibleError("Search result contains no accounts")
+                elif account_details["Count"] > 1:
+                    list_of_nodes = []
+                    for account in account_details["accounts"]:
+                        list_of_nodes.append(account["Properties"]["Name"])
+
+                    raise AnsibleError("Search result contains more than 1 account: %s" % ", ".join(list_of_nodes))
 
                 result = dict()
                 password = vault.get_password_value(account_details["accounts"][0]["AccountID"])

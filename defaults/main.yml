@@ -1,0 +1,3 @@
+cyberark_username: "{{ lookup('env','CYBERARK_USERNAME') }}"
+cyberark_password: "{{ lookup('env','CYBERARK_PASSWORD') }}"
+cyberark_url: "{{ lookup('env','CYBERARK_URL') }}"
