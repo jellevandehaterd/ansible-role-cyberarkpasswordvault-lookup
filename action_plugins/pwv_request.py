@@ -17,6 +17,9 @@
 from __future__ import (absolute_import, division, print_function)
 __metaclass__ = type
 
+import socket
+import ssl
+
 import json
 from os import getpid
 from time import sleep, time
@@ -136,6 +139,10 @@ class CyberArkPasswordVaultConnector:
         except SSLValidationError as e:
             raise AnsibleError("Error validating the server's certificate for %s: %s" % (url, to_native(e)))
         except ConnectionError as e:
+            raise AnsibleError("Error connecting to %s: %s" % (url, to_native(e)))
+        except socket.timeout as e:
+            raise AnsibleError("Error connecting to %s: %s" % (url, to_native(e)))
+        except ssl.SSLError as e:
             raise AnsibleError("Error connecting to %s: %s" % (url, to_native(e)))
         else:
             display.vvvv("CyberArk lookup: received response")
@@ -373,6 +380,7 @@ class ActionModule(ActionBase):
         with CyberArkPasswordVaultConnector(options) as vault:
             result['results'] =[]
             for name in keywords:
+            
                 single_result = self.request_password(name, safe, vault, wait, reason, period)
 
                 if 'failure' in single_result:
@@ -381,6 +389,7 @@ class ActionModule(ActionBase):
                     return result
 
                 result['results'].append(single_result)
+            
 
         return result
 
