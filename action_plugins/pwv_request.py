@@ -380,7 +380,17 @@ class ActionModule(ActionBase):
         with CyberArkPasswordVaultConnector(options) as vault:
             result['results'] =[]
             for name in keywords:
-            
+                # wait=False because we want all requests to be created quickly. 
+                # That way the user can approve all requests at once.
+                single_result = self.request_password(name, safe, vault, False, reason, period)
+
+                if 'failure' in single_result:
+                    result['failed'] = True
+                    result['msg'] = single_result['failure']
+                    return result                
+
+            for name in keywords:
+                # Now we wait for the requests to be approved.
                 single_result = self.request_password(name, safe, vault, wait, reason, period)
 
                 if 'failure' in single_result:
