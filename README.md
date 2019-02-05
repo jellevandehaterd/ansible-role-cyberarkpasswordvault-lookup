@@ -75,7 +75,7 @@ three.example.com
 #All servers in this example are accessible using the same username/password for Ansible ssh access
 [all:vars]
 ansible_user=user_whith_ssh_access
-ansible_ssh_pass="{{lookup('cyberarkpasswordvault', 'keywords to retreive ssh credentials', safe='CySafeName')['password']}}"
+ansible_ssh_pass="{{lookup('cyberarkpasswordvault', 'keywords to retreive ssh credentials', safe='CySafeName')}}"
 ```
 
 The YAML version:
@@ -85,7 +85,7 @@ all:
     mail.example.com:
   vars:
     ansible_user: "ansible"
-    ansible_ssh_pass: "{{lookup('cyberarkpasswordvault', inventory_hostname + ' ansible', safe=safe)['password']}}"
+    ansible_ssh_pass: "{{lookup('cyberarkpasswordvault', inventory_hostname + ' ansible', safe=safe)}}"
   children:
     webservers:
       hosts:
