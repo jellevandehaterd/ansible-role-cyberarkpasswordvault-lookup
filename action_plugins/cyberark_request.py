@@ -125,7 +125,7 @@ class ActionModule(ActionBase):
 
         account_id, account_details = vault.get_single_account(
             safe=self._templar.template(safe, fail_on_undefined=True),
-            search=self._templar.template(name, fail_on_undefined=True),
+            keyword=self._templar.template(name, fail_on_undefined=True),
         )
 
         display.v("account_details: %s " % account_details)

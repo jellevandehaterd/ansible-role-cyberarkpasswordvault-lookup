@@ -135,10 +135,14 @@ from os import getpid
 from time import sleep, time
 
 from ansible.errors import AnsibleError
-from ansible.module_utils._text import to_text, to_native
+from ansible.module_utils._text import to_bytes, to_text, to_native
 from ansible.module_utils.urls import open_url, ConnectionError, SSLValidationError
 from ansible.module_utils.six.moves.urllib.parse import urlencode
 from ansible.module_utils.six.moves.urllib.error import HTTPError, URLError
+
+
+from ansible.parsing import vault
+
 
 try:
     from __main__ import display
@@ -178,36 +182,64 @@ class PWVRequestInvalid(Exception):
         return "%s: %s" % (repr(self.status), repr(self.reason))
 
 
-def hasFailed(result, reason):
+def has_failed(result, reason):
     result['failed'] = True
     result['msg'] = reason
     return result
 
+#
+# class StoredObject:
+#     def __init__(self, shelf, key, default=object()):
+#         self.shelf = shelf
+#         self.key = str(key)
+#         if default is object:
+#             self.obj = shelf[key]
+#         else:
+#             self.obj = shelf.get(key, default)
+#
+#     def __enter__(self):
+#         return self.obj
+#
+#     def __exit__(self, exc_type, exc_val, exc_tb):
+#         if exc_val is None:
+#             self.shelf[self.key] = self.obj
+#
+#
+# class Store(shelve.DbfilenameShelf):
+#     def load(self, key, default=object()):
+#         return StoredObject(self, key, default)
+#
+#     def __del__(self):
+#         self.close()
+
+
 class CyberArkPasswordVaultConnector:
 
-    def __init__(self, options):
+    def __init__(self, cache, options):
         """Handles the authentication against the API and calls the appropriate API
         endpoints.
         """
+        self._cache = cache
         self._session_token = None
         self._options = options
         self.cyberark_connection = self._options.get('cyberark_connection', dict())
         self.cyberark_use_radius_authentication = False
 
-        if self.cyberark_connection.get('cyberark_use_radius_authentication', False):
+        if self.cyberark_connection.get('cyberark_use_radius_authentication', ANSIBLE_CYBERARK_USE_RADIUS_AUTHENTICATION):
             self.cyberark_use_radius_authentication = True
 
     def __enter__(self):
-        if not self._session_token:
-            self.logon()
-            display.vvvv("CyberArk lookup: Logon succesfull")
         return self
 
     def __exit__(self, *args):
+        self._cache.close()
         self.logoff()
         display.vvvv("CyberArk lookup: Logoff Succesfull")
 
     def request(self, api_endpoint, data=None, headers=None, method='GET', params=None):
+        if self._session_token is None:
+            self._session_token = self.logon()
+            display.vvvv("CyberArk lookup: Logon succesfull")
 
         if headers is None:
             headers = {
@@ -223,7 +255,7 @@ class CyberArkPasswordVaultConnector:
             headers['Authorization'] = self._session_token
 
         url = '{base_url}/PasswordVault/{api_endpoint}'.format(
-            base_url=self.cyberark_connection.get('url'),
+            base_url=self.cyberark_connection.get('url', ANSIBLE_CYBERARK_URL),
             api_endpoint=api_endpoint
         )
 
@@ -264,10 +296,10 @@ class CyberArkPasswordVaultConnector:
             return response
 
     def logon(self):
-
+        self._session_token = 'init'
         payload = json.dumps({
-            "username": self.cyberark_connection.get('username'),
-            "password": self.cyberark_connection.get('password'),
+            "username": self.cyberark_connection.get('username', ANSIBLE_CYBERARK_USERNAME),
+            "password": self.cyberark_connection.get('password', ANSIBLE_CYBERARK_PASSWORD),
             "useRadiusAuthentication": "{radius}".format(radius=str(self.cyberark_use_radius_authentication).lower()),
             # This is intended to ensure the following:
             # - The number is between 1 and 100
@@ -281,7 +313,7 @@ class CyberArkPasswordVaultConnector:
             method='POST'
         )
 
-        self._session_token = json.loads(response.read())['CyberArkLogonResult']
+        return json.loads(response.read())['CyberArkLogonResult']
 
     def logoff(self):
 
@@ -291,25 +323,28 @@ class CyberArkPasswordVaultConnector:
                 method='POST'
             )
 
-    def get_account_details(self, keywords, safe=None ):
+    def get_account_details(self, keywords, safe=None):
         """This method enables users to retrieve the password of an
         existing account that is identified by its Account ID.
         """
         display.vvvv('safe: %s, keywords: %s' % (safe, keywords))
+        if to_bytes(keywords) in self._cache:
+            result = self._cache.get(to_bytes(keywords))
+        else:
+            params = {'Keywords': keywords}
+            if safe:
+                params['Safe'] = safe
 
-        params = {'Keywords': keywords}
-        if safe:
-            params['Safe'] = safe
+            response = self.request(
+                api_endpoint='WebServices/PIMServices.svc/Accounts',
+                params=params
+            )
+            result = json.loads(response.read())
+            self._cache[to_bytes(keywords)] = result
+        return result
 
-        response = self.request(
-            api_endpoint='WebServices/PIMServices.svc/Accounts',
-            params=params
-        )
-
-        return json.loads(response.read())
-
-    def get_single_account(self, search, safe=None):
-        account_details = self.get_account_details(search, safe=safe)
+    def get_single_account(self, keywords, safe=None):
+        account_details = self.get_account_details(keywords, safe=safe)
 
         if account_details["Count"] == 0:
             raise AnsibleError("Search result contains no accounts")
@@ -331,12 +366,21 @@ class CyberArkPasswordVaultConnector:
             account_id=account_id
         )
 
-        try:
-            response = self.request(api_endpoint=api_endpoint)
-        except HTTPError as e:
-            return
+        v = vault.VaultLib(
+            [(account_id, vault.VaultSecret(self.cyberark_connection.get('password', ANSIBLE_CYBERARK_PASSWORD)))]
+        )
 
-        return to_text(response.read())
+        if to_bytes(account_id) in self._cache:
+            result = v.decrypt(self._cache.get(to_bytes(account_id)))
+        else:
+            try:
+                response = self.request(api_endpoint=api_endpoint)
+                result = to_text(response.read())
+                self._cache[to_bytes(account_id)] = v.encrypt(result)
+            except HTTPError as e:
+                return
+
+        return result
 
     def get_my_requests(self):
 
