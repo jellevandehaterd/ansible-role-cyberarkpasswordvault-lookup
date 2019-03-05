@@ -130,6 +130,8 @@ RETURN = """
 import os
 import ssl
 import json
+import time
+import shelve
 import socket
 from os import getpid
 from time import sleep, time
@@ -154,6 +156,7 @@ ANSIBLE_CYBERARK_URL = os.getenv('CYBERARK_URL', None)
 ANSIBLE_CYBERARK_USERNAME = os.getenv('CYBERARK_USERNAME', None)
 ANSIBLE_CYBERARK_PASSWORD = os.getenv('CYBERARK_PASSWORD', None)
 ANSIBLE_CYBERARK_USE_RADIUS_AUTHENTICATION = os.getenv('CYBERARK_USE_RADIUS_AUTHENTICATION', False)
+ANSIBLE_CYBERARK_REQUEST_TIMEOUT_SECONDS = os.getenv('CYBERARK_REQUEST_TIMEOUT_SECONDS', 600)
 
 
 class PWVAccountLocked(Exception):
@@ -182,46 +185,18 @@ class PWVRequestInvalid(Exception):
         return "%s: %s" % (repr(self.status), repr(self.reason))
 
 
-def has_failed(result, reason):
-    result['failed'] = True
-    result['msg'] = reason
-    return result
-
-#
-# class StoredObject:
-#     def __init__(self, shelf, key, default=object()):
-#         self.shelf = shelf
-#         self.key = str(key)
-#         if default is object:
-#             self.obj = shelf[key]
-#         else:
-#             self.obj = shelf.get(key, default)
-#
-#     def __enter__(self):
-#         return self.obj
-#
-#     def __exit__(self, exc_type, exc_val, exc_tb):
-#         if exc_val is None:
-#             self.shelf[self.key] = self.obj
-#
-#
-# class Store(shelve.DbfilenameShelf):
-#     def load(self, key, default=object()):
-#         return StoredObject(self, key, default)
-#
-#     def __del__(self):
-#         self.close()
-
-
 class CyberArkPasswordVaultConnector:
 
-    def __init__(self, cache, options):
+    def __init__(self, options, templar, cache_file=None):
         """Handles the authentication against the API and calls the appropriate API
         endpoints.
         """
-        self._cache = cache
+        self._cache = None
+        if cache_file:
+            self._cache = shelve.DbfilenameShelf(to_bytes(cache_file))
         self._session_token = None
         self._options = options
+        self._templar = templar
         self.cyberark_connection = self._options.get('cyberark_connection', dict())
         self.cyberark_use_radius_authentication = False
 
@@ -232,7 +207,8 @@ class CyberArkPasswordVaultConnector:
         return self
 
     def __exit__(self, *args):
-        self._cache.close()
+        if self._cache:
+            self._cache.close()
         self.logoff()
         display.vvvv("CyberArk lookup: Logoff Succesfull")
 
@@ -297,9 +273,13 @@ class CyberArkPasswordVaultConnector:
 
     def logon(self):
         self._session_token = 'init'
+
+        username = self._templar.template(self.cyberark_connection.get('username', ANSIBLE_CYBERARK_USERNAME), fail_on_undefined=True)
+        password = self._templar.template(self.cyberark_connection.get('password', ANSIBLE_CYBERARK_PASSWORD), fail_on_undefined=True)
+
         payload = json.dumps({
-            "username": self.cyberark_connection.get('username', ANSIBLE_CYBERARK_USERNAME),
-            "password": self.cyberark_connection.get('password', ANSIBLE_CYBERARK_PASSWORD),
+            "username": username,
+            "password": password,
             "useRadiusAuthentication": "{radius}".format(radius=str(self.cyberark_use_radius_authentication).lower()),
             # This is intended to ensure the following:
             # - The number is between 1 and 100
@@ -323,12 +303,16 @@ class CyberArkPasswordVaultConnector:
                 method='POST'
             )
 
-    def get_account_details(self, keywords, safe=None):
+    def get_accounts(self, keywords, safe=None):
         """This method enables users to retrieve the password of an
         existing account that is identified by its Account ID.
         """
-        display.vvvv('safe: %s, keywords: %s' % (safe, keywords))
-        if to_bytes(keywords) in self._cache:
+
+        if not safe:
+            safe = self._templar.template(self._options.get('safe'), fail_on_undefined=True)
+
+        display.vvvv('keywords: %s, safe: %s' % (keywords, safe))
+        if self._cache and to_bytes(keywords) in self._cache:
             result = self._cache.get(to_bytes(keywords))
         else:
             params = {'Keywords': keywords}
@@ -340,15 +324,17 @@ class CyberArkPasswordVaultConnector:
                 params=params
             )
             result = json.loads(response.read())
-            self._cache[to_bytes(keywords)] = result
+
+            if result["Count"] == 0:
+                raise AnsibleError("Search result contains no accounts")
+            if self._cache:
+                self._cache[to_bytes(keywords)] = result
         return result
 
-    def get_single_account(self, keywords, safe=None):
-        account_details = self.get_account_details(keywords, safe=safe)
+    def get_account(self, keywords, safe=None):
+        account_details = self.get_accounts(keywords, safe=safe)
 
-        if account_details["Count"] == 0:
-            raise AnsibleError("Search result contains no accounts")
-        elif account_details["Count"] > 1:
+        if account_details["Count"] > 1:
             list_of_nodes = []
             for account in account_details["accounts"]:
                 list_of_nodes.append(account["Properties"]["Name"])
@@ -357,7 +343,7 @@ class CyberArkPasswordVaultConnector:
 
         return account_details['accounts'][0]['AccountID'], account_details['accounts'][0]
 
-    def get_password_value(self, account_id):
+    def get_password(self, account_id):
         """This method enables users to retrieve the password of an
         existing account that is identified by its Account ID.
         """
@@ -370,17 +356,35 @@ class CyberArkPasswordVaultConnector:
             [(account_id, vault.VaultSecret(self.cyberark_connection.get('password', ANSIBLE_CYBERARK_PASSWORD)))]
         )
 
-        if to_bytes(account_id) in self._cache:
+        if self._cache and to_bytes(account_id) in self._cache:
             result = v.decrypt(self._cache.get(to_bytes(account_id)))
         else:
             try:
                 response = self.request(api_endpoint=api_endpoint)
                 result = to_text(response.read())
-                self._cache[to_bytes(account_id)] = v.encrypt(result)
+                if self._cache:
+                    self._cache[to_bytes(account_id)] = v.encrypt(result)
             except HTTPError as e:
                 return
 
         return result
+
+    def get_password_for_account(self, keywords, safe=None):
+
+        account_id, account_details = self.get_account(keywords, safe=safe)
+
+        display.vv("account_details: %s " % account_details)
+
+        result = dict()
+
+        result.update({
+            prop['Key'].lower(): prop['Value'] for prop in account_details['Properties']
+        })
+        result.update({
+            'password': self.get_password(account_id)
+        })
+
+        return result if self._options.get('passprops') else result['password']
 
     def get_my_requests(self):
 
@@ -420,8 +424,9 @@ class CyberArkPasswordVaultConnector:
         return json.loads(response.read())
 
     def wait_for_request_final_state(self, request_id):
-
-        while True:
+        timeout = ANSIBLE_CYBERARK_REQUEST_TIMEOUT_SECONDS
+        time_start = time.time()
+        while time.time() < time_start + timeout:
             req = self.get_request_by_id(request_id)
 
             display.display("[%s] status: %s" % (req["AccountDetails"]["Properties"]["Name"], req["StatusTitle"]))
@@ -471,3 +476,33 @@ class CyberArkPasswordVaultConnector:
             raise PWVRequestInvalid(response['RequestID'], response['StatusTitle'], response['StatusRequestReason'])
 
         return response['RequestID']
+
+    def request_password(self, keyword, wait, reason, period, safe=None):
+
+        account_id, account_details = self.get_account(keyword, safe)
+
+        try:
+            request = self.get_request(keyword, safe)
+            if not request:
+                self.create_request(account_id, reason, period)
+                request = self.get_request(keyword, safe)
+        except PWVRequestInvalid as e:
+            raise AnsibleError("could create request: %s" % e)
+
+        if not request:
+            raise AnsibleError("passwordvault request could not be found or created. Reason unknown")
+
+        if not wait:
+            return {}
+
+        success, status, reason = self.wait_for_request_final_state(request['RequestID'])
+        if not success:
+            raise AnsibleError("passwordvault request failed: %s - %s" % (status, reason))
+
+        try:
+            password = self.get_password(account_details['AccountID'])
+            return {'keyword': keyword, 'password': password, 'safe': safe}
+        except PWVAccountLocked as e:
+            return {'failure': u"Account Locked: %s" % to_text(e)}
+        except PWVAccountNoRequest as e:
+            return {'failure': u"No Request: %s" % to_text(e)}

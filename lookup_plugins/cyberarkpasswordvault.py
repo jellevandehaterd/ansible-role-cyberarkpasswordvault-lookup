@@ -1,6 +1,19 @@
-# (c) 2018, Jelle van de Haterd <j.vandehaterd@developers.nl>
-# (c) 2018 Ansible Project
-# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
+# (c) 2018, Ansible Project
+#
+# This file is part of Ansible
+#
+# Ansible is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# Ansible is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 from __future__ import (absolute_import, division, print_function)
 
 __metaclass__ = type
@@ -114,9 +127,7 @@ RETURN = """
 
 import os
 import sys
-import shelve
 from ansible.plugins.lookup import LookupBase
-from ansible.module_utils._text import to_bytes
 
 try:
     from __main__ import display
@@ -131,8 +142,7 @@ module_utils_path = os.path.normpath(os.path.dirname(__file__) +
                                      '/../module_utils')
 if module_utils_path is not None:
     sys.path.insert(0, module_utils_path)
-    from cyberark_connection import CyberArkPasswordVaultConnector as pvc, \
-        PWVAccountLocked, PWVAccountNoRequest, PWVRequestInvalid
+    from cyberark_connection import CyberArkPasswordVaultConnector as pvc
     del sys.path[0]
 
 
@@ -149,17 +159,12 @@ class LookupModule(LookupBase):
         result = []
 
         self.set_options(var_options=variables, direct=kwargs)
-        safe = self._templar.template(self.get_option('safe'), fail_on_undefined=True)
+        cache_file = self.find_file_in_search_path(variables, 'files', '.cyberarkpwv', ignore_missing=True)
+        if not cache_file:
+            cache_file = "{}/.cyberarkpwv".format(self.find_file_in_search_path(variables, '', ''))
 
-        shelve_file = self.find_file_in_search_path(variables, 'files', '.cyberarkpwv', ignore_missing=True)
-
-        if not shelve_file:
-            shelve_file = "{}/.cyberarkpwv".format(self.find_file_in_search_path(variables, '', ''))
-
-        cache = shelve.DbfilenameShelf(to_bytes(shelve_file))
-
-        with pvc(cache, self._options) as vault:
+        with pvc(self._options, self._templar, cache_file) as vault:
             for term in terms:
-                result.append(vault.get_password_for_account(keywords=term, safe=safe))
+                result.append(vault.get_password_for_account(keywords=term))
 
         return result
