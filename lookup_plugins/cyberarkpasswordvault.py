@@ -137,12 +137,13 @@ ANSIBLE_CYBERARK_USE_RADIUS_AUTHENTICATION = os.getenv('CYBERARK_USE_RADIUS_AUTH
 
 class CyberArkPasswordVaultConnector:
 
-    def __init__(self, options):
+    def __init__(self, options, templar):
         """Handles the authentication against the API and calls the appropriate API
         endpoints.
         """
         self._session_token = None
         self._options = options
+        self._templar = templar
         self.cyberark_connection = self._options.get('cyberark_connection', dict())
         self.cyberark_use_radius_authentication = False
 
@@ -207,9 +208,13 @@ class CyberArkPasswordVaultConnector:
 
     def logon(self):
 
+        # make sure we render any jinja templates
+        username=self._templar.template(self.cyberark_connection.get('username', ANSIBLE_CYBERARK_USERNAME), fail_on_undefined=True)
+        password=self._templar.template(self.cyberark_connection.get('password', ANSIBLE_CYBERARK_PASSWORD), fail_on_undefined=True)
+
         payload = json.dumps({
-            "username": self.cyberark_connection.get('username', ANSIBLE_CYBERARK_USERNAME),
-            "password": self.cyberark_connection.get('password', ANSIBLE_CYBERARK_PASSWORD),
+            "username": username,
+            "password": password,
             "useRadiusAuthentication": "{radius}".format(radius=str(self.cyberark_use_radius_authentication).lower()),
             # This is intended to ensure the following:
             # - The number is between 1 and 100
@@ -297,7 +302,7 @@ class LookupModule(LookupBase):
 
         self.set_options(var_options=variables, direct=kwargs)
 
-        with CyberArkPasswordVaultConnector(self._options) as vault:
+        with CyberArkPasswordVaultConnector(self._options, self._templar) as vault:
 
             for term in terms:
                 account_details = vault.get_account_details(
