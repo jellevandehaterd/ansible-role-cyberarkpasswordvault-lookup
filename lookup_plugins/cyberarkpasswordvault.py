@@ -2,6 +2,7 @@
 # (c) 2018 Ansible Project
 # GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
 from __future__ import (absolute_import, division, print_function)
+
 __metaclass__ = type
 
 ANSIBLE_METADATA = {'metadata_version': '1.1',
@@ -114,9 +115,8 @@ RETURN = """
 import os
 import sys
 import shelve
-from ansible.errors import AnsibleError
 from ansible.plugins.lookup import LookupBase
-from ansible.module_utils._text import to_bytes, to_text
+from ansible.module_utils._text import to_bytes
 
 try:
     from __main__ import display
@@ -135,8 +135,6 @@ if module_utils_path is not None:
         PWVAccountLocked, PWVAccountNoRequest, PWVRequestInvalid
     del sys.path[0]
 
-from ansible.parsing import vault
-
 
 class LookupModule(LookupBase):
 
@@ -148,7 +146,7 @@ class LookupModule(LookupBase):
             if isinstance(terms[0], list):
                 terms = terms[0]
 
-        ret = []
+        result = []
 
         self.set_options(var_options=variables, direct=kwargs)
         safe = self._templar.template(self.get_option('safe'), fail_on_undefined=True)
@@ -161,23 +159,7 @@ class LookupModule(LookupBase):
         cache = shelve.DbfilenameShelf(to_bytes(shelve_file))
 
         with pvc(cache, self._options) as vault:
-
             for term in terms:
-                account_id, account_details = vault.get_single_account(
-                    safe=safe,
-                    keywords=term,
-                )
-                display.v("account_details: %s " % account_details)
-                result = dict()
-                password = vault.get_password_value(account_id)
-                result.update({
-                    prop['Key'].lower(): prop['Value'] for prop in account_details['Properties']
-                })
-                result.update({
-                    'password': password
-                })
+                result.append(vault.get_password_for_account(keywords=term, safe=safe))
 
-                cache.append = result
-                ret.append(result if self.get_option('passprops') else result['password'])
-
-            return ret
+        return result
