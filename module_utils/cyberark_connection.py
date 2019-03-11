@@ -187,10 +187,6 @@ class PWVRequestInvalid(Exception):
 
 class CyberArkPasswordVaultConnector:
 
-    @staticmethod
-    def hello():
-        return 'world'
-
     def __init__(self, options, templar, cache_file=None):
         """Handles the authentication against the API and calls the appropriate API
         endpoints.
