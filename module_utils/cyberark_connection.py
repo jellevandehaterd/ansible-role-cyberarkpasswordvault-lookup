@@ -490,12 +490,10 @@ class CyberArkPasswordVaultConnector:
         if not request:
             raise AnsibleError("passwordvault request could not be found or created. Reason unknown")
 
-        if not wait:
-            return {}
-
-        success, status, reason = self.wait_for_request_final_state(request['RequestID'])
-        if not success:
-            raise AnsibleError("passwordvault request failed: %s - %s" % (status, reason))
+        if wait:
+            success, status, reason = self.wait_for_request_final_state(request['RequestID'])
+            if not success:
+                raise AnsibleError("passwordvault request failed: %s - %s" % (status, reason))
 
         try:
             password = self.get_password(account_details['AccountID'])
