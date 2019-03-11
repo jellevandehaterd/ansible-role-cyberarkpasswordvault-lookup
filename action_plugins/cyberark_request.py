@@ -87,7 +87,13 @@ class ActionModule(ActionBase):
             result['results'] = []
             for name in keywords:
 
-                single_result = vault.request_password(name, vault, wait, reason, period)
+                single_result = vault.request_password(
+                    keyword=name,
+                    wait=wait,
+                    reason=reason,
+                    period=period,
+                    safe=vault
+                )
 
                 if 'failure' in single_result:
                     result['failed'] = True
