@@ -336,12 +336,8 @@ class CyberArkPasswordVaultConnector:
     def get_account(self, keywords, safe=None):
         account_details = self.get_accounts(keywords, safe=safe)
 
-        if account_details["Count"] > 1:
-            list_of_nodes = []
-            for account in account_details["accounts"]:
-                list_of_nodes.append(account["Properties"]["Name"])
-
-            raise AnsibleError("Search result contains more than 1 account: %s" % ", ".join(list_of_nodes))
+        if account_details["Count"] != 1:
+            raise AnsibleError("Search result contains none or more than 1 account")
 
         return account_details['accounts'][0]['AccountID'], account_details['accounts'][0]
 
