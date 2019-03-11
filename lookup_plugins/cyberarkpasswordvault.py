@@ -125,8 +125,6 @@ RETURN = """
     type: dictionary
 """
 
-import os
-import sys
 from ansible.plugins.lookup import LookupBase
 
 try:
@@ -135,15 +133,20 @@ except ImportError:
     from ansible.utils.display import Display
     display = Display()
 
-# The module_utils path must be added to sys.path in order to import
-# cyberark_connection. The module_utils path is relative to the path of this
-# file.
-module_utils_path = os.path.normpath(os.path.dirname(__file__) +
-                                     '/../module_utils')
-if module_utils_path is not None:
-    sys.path.insert(0, module_utils_path)
-    from cyberark_connection import CyberArkPasswordVaultConnector as pvc
-    del sys.path[0]
+try:
+    from ansible.module_utils.cyberark_connection import CyberArkPasswordVaultConnector as pvc
+except ImportError:
+    import os
+    import sys
+    # The module_utils path must be added to sys.path in order to import
+    # cyberark_connection. The module_utils path is relative to the path of this
+    # file.
+    module_utils_path = os.path.normpath(os.path.dirname(__file__) +
+                                         '/../module_utils')
+    if module_utils_path is not None:
+        sys.path.insert(0, module_utils_path)
+        from cyberark_connection import CyberArkPasswordVaultConnector as pvc
+        del sys.path[0]
 
 
 class LookupModule(LookupBase):

@@ -187,12 +187,16 @@ class PWVRequestInvalid(Exception):
 
 class CyberArkPasswordVaultConnector:
 
+    @staticmethod
+    def hello():
+        return 'world'
+
     def __init__(self, options, templar, cache_file=None):
         """Handles the authentication against the API and calls the appropriate API
         endpoints.
         """
         self._cache = None
-        if cache_file:
+        if cache_file is not None:
             self._cache = shelve.DbfilenameShelf(to_bytes(cache_file))
         self._session_token = None
         self._options = options
@@ -311,8 +315,8 @@ class CyberArkPasswordVaultConnector:
         if not safe:
             safe = self._templar.template(self._options.get('safe'), fail_on_undefined=True)
 
-        display.vvvv('keywords: %s, safe: %s' % (keywords, safe))
         if self._cache and to_bytes(keywords) in self._cache:
+            display.vvvv('Cache retrieval for keywords: %s, safe: %s' % (keywords, safe))
             result = self._cache.get(to_bytes(keywords))
         else:
             params = {'Keywords': keywords}
@@ -327,7 +331,9 @@ class CyberArkPasswordVaultConnector:
 
             if result["Count"] == 0:
                 raise AnsibleError("Search result contains no accounts")
-            if self._cache:
+
+            if self._cache is not None:
+                display.vvvv('Write result to cache with keywords: %s' % keywords)
                 self._cache[to_bytes(keywords)] = result
         return result
 

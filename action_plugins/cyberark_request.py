@@ -1,3 +1,5 @@
+from __future__ import (absolute_import, division, print_function)
+__metaclass__ = type
 # (c) 2018, Ansible Project
 #
 # This file is part of Ansible
@@ -14,11 +16,7 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
-from __future__ import (absolute_import, division, print_function)
-__metaclass__ = type
 
-import sys
-import os.path
 from ansible.module_utils._text import to_text
 from ansible.module_utils.parsing.convert_bool import boolean
 from ansible.plugins.action import ActionBase
@@ -29,15 +27,20 @@ except ImportError:
     from ansible.utils.display import Display
     display = Display()
 
-# The module_utils path must be added to sys.path in order to import
-# cyberark_connection. The module_utils path is relative to the path of this
-# file.
-module_utils_path = os.path.normpath(os.path.dirname(__file__) +
-                                     '/../module_utils')
-if module_utils_path is not None:
-    sys.path.insert(0, module_utils_path)
-    from cyberark_connection import CyberArkPasswordVaultConnector as pvc
-    del sys.path[0]
+try:
+    from ansible.module_utils.cyberark_connection import CyberArkPasswordVaultConnector as pvc
+except ImportError:
+    import os
+    import sys
+    # The module_utils path must be added to sys.path in order to import
+    # cyberark_connection. The module_utils path is relative to the path of this
+    # file.
+    module_utils_path = os.path.normpath(os.path.dirname(__file__) +
+                                         '/../module_utils')
+    if module_utils_path is not None:
+        sys.path.insert(0, module_utils_path)
+        from cyberark_connection import CyberArkPasswordVaultConnector as pvc
+        del sys.path[0]
 
 
 class ActionModule(ActionBase):
