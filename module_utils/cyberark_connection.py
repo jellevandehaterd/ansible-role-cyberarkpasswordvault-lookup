@@ -400,9 +400,9 @@ class CyberArkPasswordVaultConnector:
         requests = self.get_my_requests()
 
         if safe:
-            request_by_name = list(filter(lambda x: x['AccountDetails']['Properties']['Name'] == name and x['AccountDetails']['Properties']['Safe'] == safe, requests['MyRequests']))
+            request_by_name = list(filter(lambda x: name in x['AccountDetails']['Properties']['Name'] and x['AccountDetails']['Properties']['Safe'] == safe, requests['MyRequests']))
         else:
-            request_by_name = list(filter(lambda x: x['AccountDetails']['Properties']['Name'] == name, requests['MyRequests']))
+            request_by_name = list(filter(lambda x: name in x['AccountDetails']['Properties']['Name'], requests['MyRequests']))
 
         if not len(request_by_name):
             return None
