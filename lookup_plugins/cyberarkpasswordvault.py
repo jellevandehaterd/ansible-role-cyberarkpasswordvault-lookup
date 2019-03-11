@@ -1,9 +1,20 @@
-# (c) 2018, Jelle van de Haterd <j.vandehaterd@developers.nl>
-# (c) 2018 Ansible Project
-# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
+# (c) 2018, Ansible Project
+#
+# This file is part of Ansible
+#
+# Ansible is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# Ansible is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 from __future__ import (absolute_import, division, print_function)
-
-from os import getpid
 
 __metaclass__ = type
 
@@ -18,7 +29,7 @@ version_added: "2.6"
 short_description: get secrets from CyberArk Privileged Account Security
 description:
   - Uses CyberArk Privileged Account Security REST API to fetch credentials
-  
+
 options:
   safe:
     description: the name of the safe to be queried.
@@ -30,7 +41,7 @@ options:
     default: False
     vars:
       - name: cyberark_passprops
-      
+
   cyberark_connection:
     description: Default endpoint connection information
     vars:
@@ -39,7 +50,7 @@ options:
     suboptions:
       url:
         description: url of cyberark PAS.
-        env: 
+        env:
          - name: CYBERARK_URL
         vars:
           - name: url
@@ -56,7 +67,7 @@ options:
         env:
           - name: CYBERARK_PASSWORD
         vars:
-          - name: password 
+          - name: password
         required: True
       use_radius_authentication:
         description: use radius for cyberark authentication.
@@ -79,7 +90,7 @@ options:
           - name: use_proxy
 """
 
-EXAMPLES = """ 
+EXAMPLES = """
   - name: Fetch password matching keyword 'ansible'
     debug: msg={{lookup('cyberarkpasswordvault', 'ansible')}}
     vars:
@@ -89,7 +100,7 @@ EXAMPLES = """
         password: "{{ my_password }}"
         validate_certs: true
         use_radius_authentication: false
-  
+
   - name: Fetch password matching keyword 'ansible'
     debug: msg={{lookup('cyberarkpasswordvault', 'ansible', passprops=true)}}
     vars:
@@ -100,7 +111,7 @@ EXAMPLES = """
         validate_certs: true
         use_radius_authentication: false
     register: passprops
-        
+
 
 """
 
@@ -109,21 +120,12 @@ RETURN = """
     description:
       - The actual value stored
   passprops:
-    description: 
+    description:
       - Properties assigned to the entry
     type: dictionary
 """
 
-import os
-import json
-
-from datetime import datetime
-from ansible.errors import AnsibleError
 from ansible.plugins.lookup import LookupBase
-from ansible.module_utils._text import to_text, to_native
-from ansible.module_utils.urls import open_url, ConnectionError, SSLValidationError
-from ansible.module_utils.six.moves.urllib.parse import urlencode
-from ansible.module_utils.six.moves.urllib.error import HTTPError, URLError
 
 try:
     from __main__ import display
@@ -131,159 +133,20 @@ except ImportError:
     from ansible.utils.display import Display
     display = Display()
 
-
-ANSIBLE_CYBERARK_URL = os.getenv('CYBERARK_URL', None)
-ANSIBLE_CYBERARK_USERNAME = os.getenv('CYBERARK_USERNAME', None)
-ANSIBLE_CYBERARK_PASSWORD = os.getenv('CYBERARK_PASSWORD', None)
-ANSIBLE_CYBERARK_USE_RADIUS_AUTHENTICATION = os.getenv('CYBERARK_USE_RADIUS_AUTHENTICATION', False)
-
-
-class CyberArkPasswordVaultConnector:
-
-    def __init__(self, options):
-        """Handles the authentication against the API and calls the appropriate API
-        endpoints.
-        """
-        self._session_token = None
-        self._options = options
-        self.cyberark_connection = self._options.get('cyberark_connection', dict())
-        self.cyberark_use_radius_authentication = False
-
-        if self.cyberark_connection.get('cyberark_use_radius_authentication', ANSIBLE_CYBERARK_USE_RADIUS_AUTHENTICATION):
-            self.cyberark_use_radius_authentication = True
-
-    def __enter__(self):
-        if not self._session_token:
-            self.logon()
-            display.vvvv("CyberArk lookup: Logon succesfull")
-        return self
-
-    def __exit__(self, *args):
-        self.logoff()
-        display.vvvv("CyberArk lookup: Logoff Succesfull")
-
-    def request(self, api_endpoint, data=None, headers=None, method='GET', params=None):
-
-        if headers is None:
-            headers = {
-                'Content-Type': 'application/json'
-            }
-
-        if method == 'POST' and data is None:
-            headers.update({"Content-Length": 0})
-        elif method == 'POST' and data is not None:
-            headers.update({"Content-Length": len(data)})
-
-        if self._session_token is not None:
-            headers['Authorization'] = self._session_token
-
-        url = '{base_url}/PasswordVault/{api_endpoint}'.format(
-            base_url=self.cyberark_connection.get('url', ANSIBLE_CYBERARK_URL),
-            api_endpoint=api_endpoint
-        )
-
-        if params:
-            params = urlencode(params)
-            url = '{url}?{querystring}'.format(url=url, querystring=params)
-
-        display.vvvv("CyberArk lookup: connecting to API endpoint %s" % url)
-        try:
-            response = open_url(
-                url=url,
-                data=data,
-                headers=headers,
-                method=method,
-                validate_certs=self.cyberark_connection.get('validate_certs', True),
-                use_proxy=self.cyberark_connection.get('use_proxy', True)
-            )
-        except HTTPError as e:
-            raise AnsibleError("Received HTTP error for %s : %s" % (url, to_native(e)))
-        except URLError as e:
-            raise AnsibleError("Failed lookup url for %s : %s" % (url, to_native(e)))
-        except SSLValidationError as e:
-            raise AnsibleError("Error validating the server's certificate for %s: %s" % (url, to_native(e)))
-        except ConnectionError as e:
-            raise AnsibleError("Error connecting to %s: %s" % (url, to_native(e)))
-        else:
-            display.vvvv("CyberArk lookup: received response")
-            return response
-
-    def logon(self):
-
-        payload = json.dumps({
-            "username": self.cyberark_connection.get('username', ANSIBLE_CYBERARK_USERNAME),
-            "password": self.cyberark_connection.get('password', ANSIBLE_CYBERARK_PASSWORD),
-            "useRadiusAuthentication": "{radius}".format(radius=str(self.cyberark_use_radius_authentication).lower()),
-            # This is intended to ensure the following:
-            # - The number is between 1 and 100
-            # - Every ansible fork gets a different number to ensure concurrency.
-            "connectionNumber": "%s" % ((getpid() % 99) + 1)
-        }, indent=2, sort_keys=False)
-
-        response = self.request(
-            api_endpoint='WebServices/auth/Cyberark/CyberArkAuthenticationService.svc/Logon',
-            data=payload,
-            method='POST'
-        )
-
-        self._session_token = json.loads(response.read())['CyberArkLogonResult']
-
-    def logoff(self):
-
-        if self._session_token is not None:
-            self.request(
-                api_endpoint='WebServices/auth/Cyberark/CyberArkAuthenticationService.svc/Logoff',
-                method='POST'
-            )
-
-    def get_account_details(self, safe, keywords=None):
-        """This method enables users to retrieve the password of an
-        existing account that is identified by its Account ID.
-        """
-        display.vvvv('safe: %s, keywords: %s' % (safe, keywords))
-        response = self.request(
-            api_endpoint='WebServices/PIMServices.svc/Accounts',
-            params={'Safe': safe, 'Keywords': keywords}
-        )
-
-        return json.loads(response.read())
-
-    def get_password_value(self, account_id):
-        """This method enables users to retrieve the password of an
-        existing account that is identified by its Account ID.
-        """
-
-        api_endpoint = 'WebServices/PIMServices.svc/Accounts/{account_id}/Credentials'.format(
-            account_id=account_id
-        )
-
-        response = self.request(
-            api_endpoint=api_endpoint
-        )
-
-        return to_text(response.read())
-
-    #TODO add api V10 support
-    def get_password_value_v10(self):
-        """This method enables users to retrieve the password or SSH key of an existing account that is identified
-        by its Account ID. It enables users to specify a reason and ticket ID, if required.
-        This method can be used from v10 and replaces the Get Account Value method."""
-        payload = {
-            "Reason": "Automatically retrieved password by Ansible on {timestamp}".format(timestamp=datetime.now()),
-            "TicketingSystemName": "ServiceNow",
-            "TicketId": "INC123456",
-            "Version": "1",
-            "ActionType": "Connect",
-            "IsUse": "false",
-            "Machine": "client.cyberark.local"
-        }
-        api_endpoint = 'API/Accounts/{app_id}/Password/Retrieve'.format(
-            app_id=self.cyberark_app_id
-        )
-
-        response = self.request(api_endpoint, data=payload, method='POST')
-
-        return json.loads(response.read())
+try:
+    from ansible.module_utils.cyberark_connection import CyberArkPasswordVaultConnector as pvc
+except ImportError:
+    import os
+    import sys
+    # The module_utils path must be added to sys.path in order to import
+    # cyberark_connection. The module_utils path is relative to the path of this
+    # file.
+    module_utils_path = os.path.normpath(os.path.dirname(__file__) +
+                                         '/../module_utils')
+    if module_utils_path is not None:
+        sys.path.insert(0, module_utils_path)
+        from cyberark_connection import CyberArkPasswordVaultConnector as pvc
+        del sys.path[0]
 
 
 class LookupModule(LookupBase):
@@ -296,31 +159,15 @@ class LookupModule(LookupBase):
             if isinstance(terms[0], list):
                 terms = terms[0]
 
-        ret = []
+        result = []
 
         self.set_options(var_options=variables, direct=kwargs)
+        cache_file = self.find_file_in_search_path(variables, 'files', '.cyberarkpwv', ignore_missing=True)
+        if not cache_file:
+            cache_file = "{}/.cyberarkpwv".format(self.find_file_in_search_path(variables, '', ''))
 
-        with CyberArkPasswordVaultConnector(self._options) as vault:
-
+        with pvc(self._options, self._templar, cache_file) as vault:
             for term in terms:
-                account_details = vault.get_account_details(
-                    safe=self._templar.template(self.get_option('safe'), fail_on_undefined=True),
-                    keywords=term,
-                )
+                result.append(vault.get_password_for_account(keywords=term))
 
-                if account_details["Count"] != 1:
-                    raise AnsibleError("Search result contains no accounts or more than 1 account")
-
-                result = dict()
-                password = vault.get_password_value(account_details["accounts"][0]["AccountID"])
-
-                if self.get_option('passprops'):
-                    result.update({
-                        prop['Key'].lower(): prop['Value'] for prop in account_details["accounts"][0]['Properties']
-                    })
-                    result.update({
-                        'password': password
-                    })
-                ret.append(result if result else password)
-
-        return ret
+        return result
