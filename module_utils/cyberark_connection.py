@@ -355,7 +355,7 @@ class CyberArkPasswordVaultConnector:
         )
 
         v = vault.VaultLib(
-            [(to_bytes(account_id), vault.VaultSecret(self.cyberark_connection.get('password', ANSIBLE_CYBERARK_PASSWORD)))]
+            [(to_bytes(account_id), vault.VaultSecret(to_bytes(self.cyberark_connection.get('password', ANSIBLE_CYBERARK_PASSWORD))))]
         )
 
         if self._cache and to_bytes(account_id) in self._cache:
