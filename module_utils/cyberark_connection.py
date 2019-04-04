@@ -319,6 +319,7 @@ class CyberArkPasswordVaultConnector:
                 api_endpoint='WebServices/PIMServices.svc/Accounts',
                 params=params
             )
+            display.vvvv("response: {}".format(response))
             result = json.loads(response.read())
 
             if result["Count"] == 0:
