@@ -202,7 +202,7 @@ class CyberArkPasswordVaultConnector:
         display.vvvv("radius env = {}".format(ANSIBLE_CYBERARK_USE_RADIUS_AUTHENTICATION))
         display.vvvv("radius = {}".format(self.cyberark_use_radius_authentication))
         if self.cyberark_connection.get('cyberark_use_radius_authentication', ANSIBLE_CYBERARK_USE_RADIUS_AUTHENTICATION):
-            display.vvvv("radius = {}".format(self.cyberark_use_radius_authentication))
+            display.vvvv("cyberark_connection = {}".format(self.cyberark_connection))
             self.cyberark_use_radius_authentication = False
 
     def __enter__(self):
