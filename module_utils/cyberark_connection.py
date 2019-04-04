@@ -135,15 +135,12 @@ import shelve
 import socket
 from os import getpid
 from time import sleep, time
-
+from ansible.parsing import vault
 from ansible.errors import AnsibleError
 from ansible.module_utils._text import to_bytes, to_text, to_native
 from ansible.module_utils.urls import open_url, ConnectionError, SSLValidationError
 from ansible.module_utils.six.moves.urllib.parse import urlencode
 from ansible.module_utils.six.moves.urllib.error import HTTPError, URLError
-
-
-from ansible.parsing import vault
 
 
 try:
