@@ -135,15 +135,12 @@ import shelve
 import socket
 from os import getpid
 from time import sleep, time
-
+from ansible.parsing import vault
 from ansible.errors import AnsibleError
 from ansible.module_utils._text import to_bytes, to_text, to_native
 from ansible.module_utils.urls import open_url, ConnectionError, SSLValidationError
 from ansible.module_utils.six.moves.urllib.parse import urlencode
 from ansible.module_utils.six.moves.urllib.error import HTTPError, URLError
-
-
-from ansible.parsing import vault
 
 
 try:
@@ -198,10 +195,10 @@ class CyberArkPasswordVaultConnector:
         self._options = options
         self._templar = templar
         self.cyberark_connection = self._options.get('cyberark_connection', dict())
-        self.cyberark_use_radius_authentication = False
+        self.cyberark_use_radius_authentication = ANSIBLE_CYBERARK_USE_RADIUS_AUTHENTICATION
 
-        if self.cyberark_connection.get('cyberark_use_radius_authentication', ANSIBLE_CYBERARK_USE_RADIUS_AUTHENTICATION):
-            self.cyberark_use_radius_authentication = True
+        if 'cyberark_use_radius_authentication' in self.cyberark_connection:
+            self.cyberark_use_radius_authentication = self.cyberark_connection['cyberark_use_radius_authentication']
 
     def __enter__(self):
         return self
@@ -224,8 +221,6 @@ class CyberArkPasswordVaultConnector:
 
         if method == 'POST' and data is None:
             headers.update({"Content-Length": 0})
-        elif method == 'POST' and data is not None:
-            headers.update({"Content-Length": len(data)})
 
         if self._session_token is not None:
             headers['Authorization'] = self._session_token
@@ -240,6 +235,7 @@ class CyberArkPasswordVaultConnector:
             url = '{url}?{querystring}'.format(url=url, querystring=params)
 
         display.vvvv("CyberArk lookup: connecting to API endpoint %s" % url)
+
         try:
             response = open_url(
                 url=url,
@@ -251,10 +247,10 @@ class CyberArkPasswordVaultConnector:
             )
         except HTTPError as e:
             if e.code == 500:
-                if e.reason.startswith('ITATS127E'): # account locked, open unapproved request
+                if e.reason.startswith('ITATS127E'):  # account locked, open unapproved request
                     raise PWVAccountLocked("Account locked: %s" % e.reason)
-                if e.reason.startswith('ITATS534E'): # no request for this account
-                    raise PWVAccountNoRequest("No request: %s "%  e.reason)
+                if e.reason.startswith('ITATS534E'):  # no request for this account
+                    raise PWVAccountNoRequest("No request: %s " % e.reason)
 
             raise AnsibleError("Received HTTP error for %s : %s" % (url, to_native(e)))
         except URLError as e:
