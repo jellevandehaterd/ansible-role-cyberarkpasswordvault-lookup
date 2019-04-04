@@ -224,8 +224,8 @@ class CyberArkPasswordVaultConnector:
 
         if method == 'POST' and data is None:
             headers.update({"Content-Length": 0})
-        elif method == 'POST' and data is not None:
-            headers.update({"Content-Length": len(data)})
+        # elif method == 'POST' and data is not None:
+        #     headers.update({"Content-Length": len(data)})
 
         if self._session_token is not None:
             headers['Authorization'] = self._session_token
