@@ -199,9 +199,11 @@ class CyberArkPasswordVaultConnector:
         self._templar = templar
         self.cyberark_connection = self._options.get('cyberark_connection', dict())
         self.cyberark_use_radius_authentication = False
-
+        display.vvvv("radius env = {}".format(ANSIBLE_CYBERARK_USE_RADIUS_AUTHENTICATION))
+        display.vvvv("radius = {}".format(self.cyberark_use_radius_authentication))
         if self.cyberark_connection.get('cyberark_use_radius_authentication', ANSIBLE_CYBERARK_USE_RADIUS_AUTHENTICATION):
-            self.cyberark_use_radius_authentication = True
+            display.vvvv("radius = {}".format(self.cyberark_use_radius_authentication))
+            self.cyberark_use_radius_authentication = False
 
     def __enter__(self):
         return self
@@ -224,10 +226,10 @@ class CyberArkPasswordVaultConnector:
 
         if method == 'POST' and data is None:
             headers.update({"Content-Length": 0})
-        # elif method == 'POST' and data is not None:
-        #     headers.update({"Content-Length": len(data)})
+        elif method == 'POST' and data is not None:
+            headers.update({"Content-Length": len(data)})
 
-        if self._session_token is not None and 'init' not in self._session_token:
+        if self._session_token is not None and self._session_token != 'init':
             headers['Authorization'] = self._session_token
 
         url = '{base_url}/PasswordVault/{api_endpoint}'.format(
