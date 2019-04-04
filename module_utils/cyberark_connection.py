@@ -224,10 +224,8 @@ class CyberArkPasswordVaultConnector:
 
         if method == 'POST' and data is None:
             headers.update({"Content-Length": 0})
-        # elif method == 'POST' and data is not None:
-        #     headers.update({"Content-Length": len(data)})
 
-        if self._session_token is not None and self._session_token != 'init':
+        if self._session_token is not None:
             headers['Authorization'] = self._session_token
 
         url = '{base_url}/PasswordVault/{api_endpoint}'.format(
@@ -241,9 +239,6 @@ class CyberArkPasswordVaultConnector:
 
         display.vvvv("CyberArk lookup: connecting to API endpoint %s" % url)
 
-        if data:
-            display.vvvv("headers: {}".format(headers))
-            display.vvvv("data length: {}\ndata: {}".format(len(data), data))
         try:
             response = open_url(
                 url=url,
@@ -255,10 +250,10 @@ class CyberArkPasswordVaultConnector:
             )
         except HTTPError as e:
             if e.code == 500:
-                if e.reason.startswith('ITATS127E'): # account locked, open unapproved request
+                if e.reason.startswith('ITATS127E'):  # account locked, open unapproved request
                     raise PWVAccountLocked("Account locked: %s" % e.reason)
-                if e.reason.startswith('ITATS534E'): # no request for this account
-                    raise PWVAccountNoRequest("No request: %s "%  e.reason)
+                if e.reason.startswith('ITATS534E'):  # no request for this account
+                    raise PWVAccountNoRequest("No request: %s " % e.reason)
 
             raise AnsibleError("Received HTTP error for %s : %s" % (url, to_native(e)))
         except URLError as e:
