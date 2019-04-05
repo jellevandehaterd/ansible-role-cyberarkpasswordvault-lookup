@@ -243,7 +243,8 @@ class CyberArkPasswordVaultConnector:
                 headers=headers,
                 method=method,
                 validate_certs=self.cyberark_connection.get('validate_certs', True),
-                use_proxy=self.cyberark_connection.get('use_proxy', True)
+                use_proxy=self.cyberark_connection.get('use_proxy', True),
+                timeout=60
             )
         except HTTPError as e:
             if e.code == 500:
