@@ -130,7 +130,6 @@ RETURN = """
 import os
 import ssl
 import json
-import time
 import shelve
 import socket
 from os import getpid
@@ -420,8 +419,8 @@ class CyberArkPasswordVaultConnector:
 
     def wait_for_request_final_state(self, request_id):
         timeout = ANSIBLE_CYBERARK_REQUEST_TIMEOUT_SECONDS
-        time_start = time.time()
-        while time.time() < time_start + timeout:
+        time_start = time()
+        while time() < time_start + timeout:
             req = self.get_request_by_id(request_id)
 
             display.display("[%s] status: %s" % (req["AccountDetails"]["Properties"]["Name"], req["StatusTitle"]))
