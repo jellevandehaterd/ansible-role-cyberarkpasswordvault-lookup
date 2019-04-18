@@ -162,11 +162,7 @@ class LookupModule(LookupBase):
         result = []
 
         self.set_options(var_options=variables, direct=kwargs)
-        cache_file = self.find_file_in_search_path(variables, 'files', '.cyberarkpwv', ignore_missing=True)
-        if not cache_file:
-            cache_file = "{}.cyberarkpwv".format(self.find_file_in_search_path(variables, '', ''))
-        display.vvv(cache_file)
-        with pvc(self._options, self._templar, cache_file) as vault:
+        with pvc(self._options, self._templar, cache_dir=self.get_basedir(variables)) as vault:
             for term in terms:
                 result.append(vault.get_password_for_account(keywords=term))
 

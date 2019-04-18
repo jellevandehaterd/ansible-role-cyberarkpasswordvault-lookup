@@ -184,18 +184,50 @@ class PWVRequestInvalid(Exception):
         return "%s: %s" % (repr(self.status), repr(self.reason))
 
 
+class CyberArkPasswordVaultCache:
+
+    def __init__(self, cache_file, max_age_seconds=None):
+        self._cache_file = cache_file
+        if not self.validate_age(max_age_seconds):
+            self.clear()
+
+        self._cache = shelve.DbfilenameShelf(to_bytes(cache_file))
+
+    @property
+    def cache(self):
+        return self._cache
+
+    def clear(self):
+        if os.path.exists(self._cache_file) and os.path.isfile(self._cache_file):
+            # Depending on the shelve type used it can consist of multiple files hence the glob
+            path, filename = os.path.split(self._cache_file)
+            for name in glob.glob('{0}/{1}*'.format(path, filename)):
+                os.remove(name)
+            display.vvv("Cleared stale cache")
+
+    def validate_age(self, max_age_seconds=None):
+        if max_age_seconds is None:
+            max_age_seconds = ANSIBLE_CYBERARK_CACHE_MAX_AGE_SECONDS
+        try:
+            mtime = os.stat(self._cache_file).st_mtime
+            if (int(time()) - int(mtime)) <= int(max_age_seconds):
+                display.vvv("Cache valid")
+                return True
+            else:
+                display.vvv("Cache expired")
+                return False
+        except OSError:
+            # cache is invalid and/or removed so continue and create a new cache file
+            return
+
+
 class CyberArkPasswordVaultConnector:
 
-    def __init__(self, options, templar, cache_file=None):
+    def __init__(self, options, templar, cache_dir=None, cache_max_age_seconds=None):
         """Handles the authentication against the API and calls the appropriate API
         endpoints.
         """
-        self._cache = None
-        if cache_file is not None:
-            if not self.validate_cache_age(cache_file):
-                self.clear_cache(cache_file)
-            self._cache = shelve.DbfilenameShelf(to_bytes(cache_file))
-
+        self.__cache__(cache_dir, cache_max_age_seconds)
         self._session_token = None
         self._options = options
         self._templar = templar
@@ -214,30 +246,17 @@ class CyberArkPasswordVaultConnector:
         self.logoff()
         display.vvvv("CyberArk lookup: Logoff Succesfull")
 
-    @staticmethod
-    def clear_cache(cache_file):
-        if os.path.exists(cache_file) and os.path.isfile(cache_file):
-            # Depending on the shelve type used it can consist of multiple files hence the glob
-            path, filename = os.path.split(cache_file)
-            for name in glob.glob('{0}/{1}*'.format(path, filename)):
-                os.remove(name)
-            display.vvv("Cleared stale cache")
-
-    @staticmethod
-    def validate_cache_age(cache_file, max_age_seconds=None):
-        if max_age_seconds is None:
-            max_age_seconds = ANSIBLE_CYBERARK_CACHE_MAX_AGE_SECONDS
-        try:
-            mtime = os.stat(cache_file).st_mtime
-            if (int(time()) - int(mtime)) <= int(max_age_seconds):
-                display.vvv("Cache valid")
-                return True
-            else:
-                display.vvv("Cache expired")
-                return False
-        except OSError:
-            # cache is invalid and/or removed so continue and create a new cache file
-            return
+    def __cache__(self, cache_dir, cache_max_age_seconds=None):
+        if cache_dir is not None and os.path.isdir(cache_dir):
+            self._cache = CyberArkPasswordVaultCache(
+                cache_file="/".join([
+                    cache_dir,
+                    ANSIBLE_CYBERARK_CACHE_FILE_NAME]),
+                max_age_seconds=cache_max_age_seconds
+            ).cache
+        else:
+            self._cache = None
+        return self._cache
 
     def request(self, api_endpoint, data=None, headers=None, method='GET', params=None):
         if self._session_token is None:
@@ -406,8 +425,6 @@ class CyberArkPasswordVaultConnector:
     def get_password_for_account(self, keywords, safe=None):
 
         account_id, account_details = self.get_account(keywords, safe=safe)
-
-        display.vv("account_details: %s " % account_details)
 
         result = dict()
 
