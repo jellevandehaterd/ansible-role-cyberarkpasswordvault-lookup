@@ -1,0 +1,14 @@
+---
+- hosts: localhost
+  connection: local
+  vars:
+    cyberark_connection:
+      validate_certs: False
+  roles:
+  - ../ansible-role-cyberarkpasswordvault-lookup
+  tasks:
+  - name: Get credential from extra vars
+    set_fact:
+      credential: "{{ lookup('cyberarkpasswordvault', keyword, safe=safe, passprops=true)}}"
+  - debug:
+      var: credential

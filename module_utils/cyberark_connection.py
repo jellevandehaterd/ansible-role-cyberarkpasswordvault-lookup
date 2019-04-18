@@ -17,6 +17,7 @@
 from __future__ import (absolute_import, division, print_function)
 
 from ansible.module_utils.basic import AnsibleModule
+from ansible.parsing.vault import AnsibleVaultError
 
 __metaclass__ = type
 
@@ -130,6 +131,7 @@ RETURN = """
 import os
 import ssl
 import json
+import glob
 import shelve
 import socket
 from os import getpid
@@ -153,7 +155,8 @@ ANSIBLE_CYBERARK_USERNAME = os.getenv('CYBERARK_USERNAME', None)
 ANSIBLE_CYBERARK_PASSWORD = os.getenv('CYBERARK_PASSWORD', None)
 ANSIBLE_CYBERARK_USE_RADIUS_AUTHENTICATION = os.getenv('CYBERARK_USE_RADIUS_AUTHENTICATION', False)
 ANSIBLE_CYBERARK_REQUEST_TIMEOUT_SECONDS = os.getenv('CYBERARK_REQUEST_TIMEOUT_SECONDS', 600)
-
+ANSIBLE_CYBERARK_CACHE_FILE_NAME = os.getenv('CYBERARK_CACHE_FILE_NAME', '.cyberarkpwv')
+ANSIBLE_CYBERARK_CACHE_MAX_AGE_SECONDS = os.getenv('CYBERARK_CACHE_MAX_AGE_SECONDS', 300)
 
 class PWVAccountLocked(Exception):
     def __init__(self, value):
@@ -189,7 +192,10 @@ class CyberArkPasswordVaultConnector:
         """
         self._cache = None
         if cache_file is not None:
+            if not self.validate_cache_age(cache_file):
+                self.clear_cache(cache_file)
             self._cache = shelve.DbfilenameShelf(to_bytes(cache_file))
+
         self._session_token = None
         self._options = options
         self._templar = templar
@@ -207,6 +213,31 @@ class CyberArkPasswordVaultConnector:
             self._cache.close()
         self.logoff()
         display.vvvv("CyberArk lookup: Logoff Succesfull")
+
+    @staticmethod
+    def clear_cache(cache_file):
+        if os.path.exists(cache_file) and os.path.isfile(cache_file):
+            # Depending on the shelve type used it can consist of multiple files hence the glob
+            path, filename = os.path.split(cache_file)
+            for name in glob.glob('{0}/{1}*'.format(path, filename)):
+                os.remove(name)
+            display.vvv("Cleared stale cache")
+
+    @staticmethod
+    def validate_cache_age(cache_file, max_age_seconds=None):
+        if max_age_seconds is None:
+            max_age_seconds = ANSIBLE_CYBERARK_CACHE_MAX_AGE_SECONDS
+        try:
+            mtime = os.stat(cache_file).st_mtime
+            if (int(time()) - int(mtime)) <= int(max_age_seconds):
+                display.vvv("Cache valid")
+                return True
+            else:
+                display.vvv("Cache expired")
+                return False
+        except OSError:
+            # cache is invalid and/or removed so continue and create a new cache file
+            return
 
     def request(self, api_endpoint, data=None, headers=None, method='GET', params=None):
         if self._session_token is None:
@@ -308,7 +339,7 @@ class CyberArkPasswordVaultConnector:
             safe = self._templar.template(self._options.get('safe'), fail_on_undefined=True)
 
         if self._cache and to_bytes(keywords) in self._cache:
-            display.vvvv('Cache retrieval for keywords: %s, safe: %s' % (keywords, safe))
+            display.vvv('Cache retrieval for keywords: %s, safe: %s' % (keywords, safe))
             result = self._cache.get(to_bytes(keywords))
         else:
             params = {'Keywords': keywords}
@@ -325,7 +356,7 @@ class CyberArkPasswordVaultConnector:
                 raise AnsibleError("Search result contains no accounts")
 
             if self._cache is not None:
-                display.vvvv('Write result to cache with keywords: %s' % keywords)
+                display.vvv('Write result to cache with keywords: %s' % keywords)
                 self._cache[to_bytes(keywords)] = result
         return result
 
@@ -345,21 +376,30 @@ class CyberArkPasswordVaultConnector:
         api_endpoint = 'WebServices/PIMServices.svc/Accounts/{account_id}/Credentials'.format(
             account_id=account_id
         )
-
         v = vault.VaultLib(
             [(to_bytes(account_id), vault.VaultSecret(to_bytes(self.cyberark_connection.get('password', ANSIBLE_CYBERARK_PASSWORD))))]
         )
 
         if self._cache and to_bytes(account_id) in self._cache:
-            result = v.decrypt(self._cache.get(to_bytes(account_id)))
-        else:
             try:
-                response = self.request(api_endpoint=api_endpoint)
-                result = to_text(response.read())
-                if self._cache:
-                    self._cache[to_bytes(account_id)] = v.encrypt(result)
-            except HTTPError as e:
-                return
+                result = v.decrypt(self._cache.get(to_bytes(account_id)))
+            except AnsibleVaultError as e:
+                display.vvv("Invalidate credential cache for '{}'".format(account_id))
+                del self._cache[to_bytes(account_id)]
+            else:
+                # No exceptions occurred, return result from cache
+                return result
+
+        try:
+            response = self.request(api_endpoint=api_endpoint)
+            result = to_text(response.read())
+        except HTTPError as e:
+            return
+        else:
+            # No exceptions so safely add result to cache
+            if self._cache:
+                display.vvv("Set credential cache for '{}'".format(account_id))
+                self._cache[to_bytes(account_id)] = v.encrypt(result)
 
         return result
 

@@ -1,0 +1,50 @@
+---
+- hosts: localhost
+  gather_facts: false
+  environment:
+  - ANSIBLE_MODULE_UTILS: ./module_utils
+  roles:
+  - ../ansible-role-cyberarkpasswordvault-lookup
+  vars_prompt:
+  - name: "pwv_period"
+    prompt: "How long do we need the password (in seconds)?"
+    default: 3600
+  - name: "pwv_reason"
+    prompt: "Reason for passwordvault request"
+    private: false
+  - name: "corpkey_username"
+    prompt: your corporate key (used for ssh and passwordvault)
+  - name: "corpkey_password"
+    prompt: your corporate password (used for ssh and passwordvault)
+    private: true
+  vars:
+    cyberark_npa_account: "ansible_log4all"
+    cyberark_safe: "MySafeName"
+    cyberark_connection:
+      validate_certs: False
+      url: 'https://components.cyberarkdemo.com'
+      username: "{{ corpkey_username }}"
+      password: "{{ corpkey_password }}"
+      use_radius_authentication: False
+
+  tasks:
+  - name: Request the credentials for the npa account
+    cyberark_request:
+      connection: "{{ cyberark_connection }}"
+      safe: "{{ cyberark_safe }}"
+      keywords: "{{cyberark_npa_account}}"
+      reason: "{{pwv_reason}}"
+      period: "{{pwv_period}}"
+      wait: true
+    register: pwv_result
+    become: false
+    delegate_to: localhost
+    run_once: yes
+  - name: set the ssh credentials to the npa account for each host
+    set_fact:
+      ansible_ssh_user: "{{npa_account}}"
+      ansible_ssh_pass: "{{ pwv_result.results[0].password}}"
+    no_log: true
+  - name: whoami
+    command: whoami
+
