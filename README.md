@@ -43,16 +43,16 @@ Below examples assume the variables specified above are set.
   tasks:
     - name: Request password for keyword 'foo, bar'
       debug:
-        msg: "{{lookup('cyberarkpasswordvault', 'foo, bar')}}"
+        msg: "{{ lookup('cyberarkpasswordvault', 'foo, bar') }}"
 
     - name: Request passwords and password properties(passprops) for multiple accounts.
       debug:
-        msg: "Username: {{item.passprops.username}}, Password: {{ item.password }}"
-      with_items: "{{lookup('cyberarkpasswordvault', 'one, foo', 'two, bar', passprops=True)}}"
+        msg: "Username: {{ item.passprops.username }}, Password: {{ item.password }}"
+      with_items: "{{ lookup('cyberarkpasswordvault', 'one, foo', 'two, bar', passprops=True) }}"
 
     - debug:
         var: item
-      loop: "{{query('cyberarkpasswordvault', keywords, passprops=True)}}"
+      loop: "{{ query('cyberarkpasswordvault', keywords, passprops=True) }}"
 ```
 
 2) Usage password lookup in inventory (no authorisation flow)
@@ -75,7 +75,7 @@ three.example.com
 #All servers in this example are accessible using the same username/password for Ansible ssh access
 [all:vars]
 ansible_user=user_whith_ssh_access
-ansible_ssh_pass="{{lookup('cyberarkpasswordvault', 'keywords to retreive ssh credentials', safe='CySafeName')}}"
+ansible_ssh_pass="{{ lookup('cyberarkpasswordvault', 'keywords to retreive ssh credentials', safe='CySafeName') }}"
 ```
 
 The YAML version:
@@ -85,7 +85,7 @@ all:
     mail.example.com:
   vars:
     ansible_user: "ansible"
-    ansible_ssh_pass: "{{lookup('cyberarkpasswordvault', inventory_hostname + ' ansible', safe=safe)}}"
+    ansible_ssh_pass: "{{ lookup('cyberarkpasswordvault', inventory_hostname + ' ansible', safe=safe) }}"
   children:
     webservers:
       hosts:
@@ -124,11 +124,11 @@ This example requests the credentials for the `ansible_log4all` NPA and uses it 
   tasks:
   - name: Request the credentials for the npa account
     pwv_request:
-      keywords: "{{npa_account}}"
-      reason: "{{pwv_reason}}"
-      period: "{{pwv_period}}"
-      username: "{{corpkey_username}}"
-      password: "{{corpkey_password}}"
+      keywords: "{{ npa_account }}"
+      reason: "{{ pwv_reason }}"
+      period: "{{ pwv_period }}"
+      username: "{{ corpkey_username }}"
+      password: "{{ corpkey_password }}"
       wait: true
     register: pwv_result
     become: false
@@ -136,8 +136,8 @@ This example requests the credentials for the `ansible_log4all` NPA and uses it 
     run_once: yes
   - name: set the ssh credentials to the npa account for each host
     set_fact:
-      ansible_ssh_user: "{{npa_account}}"
-      ansible_ssh_pass: "{{ pwv_result.results[0].password}}"
+      ansible_ssh_user: "{{ npa_account }}"
+      ansible_ssh_pass: "{{ pwv_result.results[0].password }}"
     no_log: true
   - name: whoami
     command: whoami
@@ -167,10 +167,10 @@ This example requests the credentials for the `ansible_log4all` NPA and uses it 
   - name: Request password from the passwordvault
     pwv_request:
       keywords: "{{ ansible_play_hosts | format_list('root@%s') }}"
-      reason: "{{pwv_reason}}"
-      period: "{{pwv_period}}"
-      username: "{{corpkey_username}}"
-      password: "{{corpkey_password}}"
+      reason: "{{ pwv_reason }}"
+      period: "{{ pwv_period }}"
+      username: "{{ corpkey_username }}"
+      password: "{{ corpkey_password }}"
       wait: true
     register: pwv_result
     become: false
@@ -180,7 +180,7 @@ This example requests the credentials for the `ansible_log4all` NPA and uses it 
     set_fact:
       ansible_ssh_user: "{{ corpkey_username }}"
       ansible_ssh_pass: "{{ corpkey_password }}"
-      ansible_become_pass: "{{item.password}}"
+      ansible_become_pass: "{{ item.password }}"
     delegate_to: "{{ item.keyword | remove_prefix('root@') }}"
     with_items: "{{ pwv_result.results }}"
     run_once: yes
